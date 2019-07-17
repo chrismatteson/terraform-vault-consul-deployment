@@ -201,6 +201,7 @@ module "consul" {
       recursor                            = var.recursor,
       bucket				  = aws_s3_bucket.consul-setup.id,
       bucketkms                           = aws_kms_key.bucketkms.id,
+      consul_ent_license                  = var.consul_ent_license,
     },
   )
 }
