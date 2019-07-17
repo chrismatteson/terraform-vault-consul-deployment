@@ -93,7 +93,7 @@ resource "aws_kms_key" "bucketkms" {
   }
 }
 
-resource "aws_s3_bucket" "consul-setup" {
+resource "aws_s3_bucket" "consul_setup" {
   bucket = "${random_id.project_name.hex}-consul-setup"
   acl    = "private"
   lifecycle {
@@ -103,7 +103,7 @@ resource "aws_s3_bucket" "consul-setup" {
 
 resource "aws_s3_bucket_object" "gossip_encrypt_key" {
   key        = "gossip_encrypt_key"
-  bucket     = aws_s3_bucket.consul-setup.id
+  bucket     = aws_s3_bucket.consul_setup.id
   content    = random_id.gossip_encrypt_key.b64_std
   kms_key_id = aws_kms_key.bucketkms.arn
   lifecycle {
@@ -113,7 +113,7 @@ resource "aws_s3_bucket_object" "gossip_encrypt_key" {
 
 resource "aws_s3_bucket_object" "private_key" {
   key        = "ca_private_key.pem"
-  bucket     = aws_s3_bucket.consul-setup.id
+  bucket     = aws_s3_bucket.consul_setup.id
   content    = tls_private_key.private_key.private_key_pem
   kms_key_id = aws_kms_key.bucketkms.arn
   lifecycle {
@@ -123,7 +123,7 @@ resource "aws_s3_bucket_object" "private_key" {
 
 resource "aws_s3_bucket_object" "ca_cert" {
   key        = "ca.pem"
-  bucket     = aws_s3_bucket.consul-setup.id
+  bucket     = aws_s3_bucket.consul_setup.id
   content    = tls_self_signed_cert.ca.cert_pem
   lifecycle {
     create_before_destroy = true
@@ -133,12 +133,49 @@ resource "aws_s3_bucket_object" "ca_cert" {
 resource "aws_s3_bucket_object" "consul_license" {
   count      = var.consul_ent_license != "" ? 1: 0
   key        = "ca.pem"
-  bucket     = aws_s3_bucket.consul-setup.id
+  bucket     = aws_s3_bucket.consul_setup.id
   content    = var.consul_ent_license
   kms_key_id = aws_kms_key.bucketkms.arn
   lifecycle {
     create_before_destroy = true
   }
+}
+
+# Create IAM policy to allow Consul to reach S3 bucket and KMS key
+data "aws_iam_policy_document" "consul_bucket" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetObject"
+    ]
+    resources = [
+      "${aws_s3_bucket.consul_setup.arn}/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "consul_bucket" {
+  name   = "${random_id.project_name.id}-consul-bucket"
+  role   = module.consul.iam_role_id
+  policy = data.aws_iam_policy_document.consul_bucket.json
+}
+
+data "aws_iam_policy_document" "bucketkms" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt"
+    ]
+    resources = [
+      "${aws_kms_key.bucketkms.arn}"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "bucketkms" {
+  name   = "${random_id.project_name.id}-bucketkms"
+  role   = module.consul.iam_role_id
+  policy = data.aws_iam_policy_document.bucketkms.json
 }
 
 # Lookup most recent AMI
@@ -199,9 +236,10 @@ module "consul" {
       environment                         = var.environment,
       skip_consul_config                  = var.skip_consul_config,
       recursor                            = var.recursor,
-      bucket				  = aws_s3_bucket.consul-setup.id,
+      bucket				  = aws_s3_bucket.consul_setup.id,
       bucketkms                           = aws_kms_key.bucketkms.id,
       consul_ent_license                  = var.consul_ent_license,
     },
   )
 }
+
