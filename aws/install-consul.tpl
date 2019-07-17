@@ -2,6 +2,28 @@
 
 set -e
 
+function log {
+  local -r level="$1"
+  local -r message="$2"
+  local -r timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  >&2 echo -e "$${timestamp} [$${level}] [$SCRIPT_NAME] $${message}"
+}
+
+function log_info {
+  local -r message="$1"
+  log "INFO" "$message"
+}
+
+function log_warn {
+  local -r message="$1"
+  log "WARN" "$message"
+}
+
+function log_error {
+  local -r message="$1"
+  log "ERROR" "$message"
+}
+
 function has_yum {
   [ -n "$(command -v yum)" ]
 }
@@ -23,29 +45,29 @@ else
   exit 1
 fi
 
-local path=%{ if path != "" }${path}%{else}"/opt/consul"%{endif}
-local ca-path=%{ if ca-path != "" }${ca-path}%{else}"$path/tls/ca/ca.pem"%{endif}
-local ca-private-key-path=$path/tls/ca/ca_private_key.pem
-local cert-file-path=%{ if cert-file-path != "" }${cert-file-path}%{else}"$path/tls/"%{endif}
-local key-file-path=%{ if key-file-path != "" }${key-file-path}%{else}"$path/tls/"%{endif}
+path=%{ if path != "" }${path}%{else}"/opt/consul"%{endif}
+ca_path=%{ if ca_path != "" }${ca_path}%{else}"$path/tls/ca/ca.pem"%{endif}
+ca_private_key-path=$path/tls/ca/ca_private_key.pem
+cert_file_path=%{ if cert_file_path != "" }${cert_file_path}%{else}"$path/tls/"%{endif}
+key_file_path=%{ if key_file_path != "" }${key_file_path}%{else}"$path/tls/"%{endif}
 
 curl -O https://raw.githubusercontent.com/hashicorp/terraform-aws-consul/master/modules/install-consul/install-consul -O https://raw.githubusercontent.com/hashicorp/terraform-aws-consul/master/modules/run-consul/run-consul
 
 chmod +x ./install-consul
 chmod +x ./run-consul
-/bin/bash ./install-consul %{ if version != "" }--version ${version} %{ endif}%{ if download-url != "" }--download-url ${download-url} %{ endif}%{ if path != "" }--path ${path} %{ endif}%{ if user != "" }--user ${user} %{ endif}
+/bin/bash ./install-consul %{ if version != "" }--version ${version} %{ endif}%{ if download_url != "" }--download_url ${download_url} %{ endif}%{ if path != "" }--path ${path} %{ endif}%{ if user != "" }--user ${user} %{ endif}
 cp ./run-consul ${path}/bin/run-consul
-%{ if enable-gossip-encryption }
-local gossip-encrypt-key=`aws s3 cp s3://${bucket}/gossip_encrypt_key -`
+%{ if enable_gossip_encryption }
+gossip_encrypt_key=`aws s3 cp s3://${bucket}/gossip_encrypt_key -`
 %{ endif }
-%{ if enable-rpc-encryption && ca-path == "" }
-aws s3 cp s3://${bucket}/ca.pem $ca-path
-aws s3 cp s3://${bucket}/ca_private_key.pem $ca-private-key-path --sse aws:kms --sse-kms-key-id=${bucketkms}
-$path/bin/consul tls cert create -server -ca=$ca-path -key=$ca-private-key-path %{ if datacenter != "" }-dc=${datacenter} %{ endif }
-cp %{ if datacenter != ""}${datacenter}%{ else }dc1%{ endif }-server-consul-0.pem $cert-file-path
-cp %{ if datacenter != ""}${datacenter}%{ else }dc1%{ endif }-server-consul-0-key.pem $key-file-path
+%{ if enable_rpc_encryption && ca_path == "" }
+aws s3 cp s3://${bucket}/ca.pem $ca_path
+aws s3 cp s3://${bucket}/ca_private_key.pem $ca_private_key_path --sse aws:kms --sse-kms-key-id=${bucketkms}
+$path/bin/consul tls cert create -server -ca=$ca_path -key=$ca_private_key_path %{ if datacenter != "" }-dc=${datacenter} %{ endif }
+cp %{ if datacenter != ""}${datacenter}%{ else }dc1%{ endif }-server-consul-0.pem $cert_file_path
+cp %{ if datacenter != ""}${datacenter}%{ else }dc1%{ endif }-server-consul-0-key.pem $key_file_path
 %{ endif }
-/bin/bash $path/bin/run-consul %{ if server == true }--server %{ endif}%{ if client == true }--client %{ endif}%{ if config-dir != "" }--config-dir ${config-dir} %{ endif}%{ if data-dir != "" }--data-dir ${data-dir} %{ endif}%{ if systemd-stdout != "" }--systemd-stdout ${systemd-stdout} %{ endif}%{ if systemd-stderr != "" }--systemd-stderr ${systemd-stderr} %{ endif}%{ if bin-dir != "" }--bin-dir ${bin-dir} %{ endif}%{ if user != "" }--user ${user} %{ endif}%{ if cluster-tag-key != "" }--cluster-tag-key ${cluster-tag-key} %{ endif}%{ if cluster-tag-value != "" }--cluster-tag-value ${cluster-tag-value} %{ endif}%{ if datacenter != "" }--datacenter ${datacenter} %{ endif}%{ if autopilot-cleanup-dead-servers != "" }--autopilot-cleanup-dead-servers ${autopilot-cleanup-dead-servers} %{ endif}%{ if autopilot-last-contact-threshold != "" }--autopilot-last-contact-threshold ${autopilot-last-contact-threshold} %{ endif}%{ if autopilot-max-trailing-logs != "" }--autopilot-max-trailing-logs ${autopilot-max-trailing-logs} %{ endif}%{ if autopilot-server-stabilization-time != "" }--autopilot-server-stabilization-time ${autopilot-server-stabilization-time} %{ endif}%{ if autopilot-redundancy-zone-tag != "" }--autopilot-redundancy-zone-tag ${autopilot-redundancy-zone-tag} %{ endif}%{ if autopilot-disable-upgrade-migration != "" }--autopilot-disable-upgrade-migration ${autopilot-disable-upgrade-migration} %{ endif}%{ if autopilot-upgrade-version-tag != "" }--autopilot-upgrade-version-tag ${autopilot-upgrade-version-tag} %{ endif}%{ if enable-gossip-encryption }--enable-gossip-encryption --gossip-encryption-key $gossip-encrypt-key %{ endif}%{ if enable-rpc-encryption }--enable-rpc-encryption --ca-path $ca-path --cert-file-path $cert-file-path --key-file-path $key-file-path %{ endif}%{ if environment != "" }--environment ${environment} %{ endif}%{ if skip-consul-config != "" }--skip-consul-config ${skip-consul-config} %{ endif}%{ if recursor != "" }--recursor ${recursor} %{ endif}
+/bin/bash $path/bin/run-consul %{ if server == true }--server %{ endif}%{ if client == true }--client %{ endif}%{ if config_dir != "" }--config-dir ${config_dir} %{ endif}%{ if data_dir != "" }--data-dir ${data_dir} %{ endif}%{ if systemd_stdout != "" }--systemd-stdout ${systemd_stdout} %{ endif}%{ if systemd_stderr != "" }--systemd-stderr ${systemd_stderr} %{ endif}%{ if bin_dir != "" }--bin-dir ${bin_dir} %{ endif}%{ if user != "" }--user ${user} %{ endif}%{ if cluster_tag_key != "" }--cluster-tag-key ${cluster_tag_key} %{ endif}%{ if cluster_tag_value != "" }--cluster-tag-value ${cluster_tag_value} %{ endif}%{ if datacenter != "" }--datacenter ${datacenter} %{ endif}%{ if autopilot_cleanup_dead_servers != "" }--autopilot-cleanup-dead-servers ${autopilot_cleanup_dead_servers} %{ endif}%{ if autopilot_last_contact_threshold != "" }--autopilot-last-contact-threshold ${autopilot_last_contact_threshold} %{ endif}%{ if autopilot_max_trailing_logs != "" }--autopilot-max-trailing-logs ${autopilot_max_trailing_logs} %{ endif}%{ if autopilot_server_stabilization_time != "" }--autopilot-server-stabilization-time ${autopilot_server_stabilization_time} %{ endif}%{ if autopilot_redundancy_zone_tag != "" }--autopilot-redundancy-zone-tag ${autopilot_redundancy_zone_tag} %{ endif}%{ if autopilot_disable_upgrade_migration != "" }--autopilot-disable-upgrade-migration ${autopilot_disable_upgrade_migration} %{ endif}%{ if autopilot_upgrade_version_tag != "" }--autopilot-upgrade-version-tag ${autopilot_upgrade_version_tag} %{ endif}%{ if enable_gossip_encryption }--enable-gossip-encryption --gossip-encryption-key $gossip_encrypt_key %{ endif}%{ if enable_rpc_encryption }--enable-rpc-encryption --ca-path $ca_path --cert-file-path $cert_file_path --key-file-path $key_file_path %{ endif}%{ if environment != "" }--environment ${environment} %{ endif }%{ if skip_consul_config != "" }--skip-consul-config ${skip_consul_config} %{ endif}%{ if recursor != "" }--recursor ${recursor} %{ endif}
 %{ if consul_ent_license != ""}
 local consul_ent_license=`aws s3 cp s3://${bucket}/gossip_encrypt_key - --sse aws:kms --sse-kms-key-id=${bucketkms}`
 while [ curl http://127.0.0.1:8500/v1/status/leader -eq "" ] do
