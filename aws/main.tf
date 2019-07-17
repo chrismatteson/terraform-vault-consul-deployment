@@ -36,7 +36,7 @@ module "vpc" {
 }
 
 # Create Consul Encryption Key
-resource "random_id" "encrypt_key" {
+resource "random_id" "gossip_encrypt_key" {
   byte_length = 16
   lifecycle {
     create_before_destroy = true
@@ -88,18 +88,27 @@ resource "tls_self_signed_cert" "ca" {
 resource "aws_kms_key" "bucketkms" {
   description             = "${random_id.project_name.hex}-key"
   deletion_window_in_days = 7
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_s3_bucket" "consul-setup" {
   bucket = "${random_id.project_name.hex}-consul-setup"
   acl    = "private"
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
-resource "aws_s3_bucket_object" "encrypt_key" {
-  key        = "encrypt_key"
+resource "aws_s3_bucket_object" "gossip_encrypt_key" {
+  key        = "gossip_encrypt_key"
   bucket     = aws_s3_bucket.consul-setup.id
-  content    = random_id.encrypt_key.b64_std
+  content    = random_id.gossip_encrypt_key.b64_std
   kms_key_id = aws_kms_key.bucketkms.arn
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_object" "private_key" {
@@ -107,12 +116,18 @@ resource "aws_s3_bucket_object" "private_key" {
   bucket     = aws_s3_bucket.consul-setup.id
   content    = tls_private_key.private_key.private_key_pem
   kms_key_id = aws_kms_key.bucketkms.arn
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_object" "ca_cert" {
   key        = "ca.pem"
   bucket     = aws_s3_bucket.consul-setup.id
   content    = tls_self_signed_cert.ca.cert_pem
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_object" "consul_license" {
@@ -121,6 +136,9 @@ resource "aws_s3_bucket_object" "consul_license" {
   bucket     = aws_s3_bucket.consul-setup.id
   content    = var.consul_ent_license
   kms_key_id = aws_kms_key.bucketkms.arn
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Lookup most recent AMI
@@ -177,11 +195,12 @@ module "consul" {
       autopilot-disable-upgrade-migration = var.autopilot-disable-upgrade-migration,
       autopilot-upgrade-version-tag       = var.autopilot-upgrade-version-tag,
       enable-gossip-encryption            = var.enable-gossip-encryption,
-      gossip-encryption-key               = var.gossip-encryption-key,
       enable-rpc-encryption               = var.enable-rpc-encryption,
       environment                         = var.environment,
       skip-consul-config                  = var.skip-consul-config,
       recursor                            = var.recursor,
+      bucket				  = aws_s3_bucket.consul-setup.id,
+      bucketkms                           = aws_kms_key.bucketkms.id,
     },
   )
 }
