@@ -1,7 +1,5 @@
 #!/bin/bash 
 
-set -e
-
 function log {
   local -r level="$1"
   local -r message="$2"
@@ -47,14 +45,15 @@ fi
 
 path=%{ if path != "" }${path}%{else}"/opt/consul"%{endif}
 ca_path=%{ if ca_path != "" }${ca_path}%{else}"$path/tls/ca/ca.pem"%{endif}
-ca_private_key-path=$path/tls/ca/ca_private_key.pem
-cert_file_path=%{ if cert_file_path != "" }${cert_file_path}%{else}"$path/tls/"%{endif}
-key_file_path=%{ if key_file_path != "" }${key_file_path}%{else}"$path/tls/"%{endif}
+ca_private_key_path=$path/tls/ca/ca_private_key.pem
+cert_file_path=%{ if cert_file_path != "" }${cert_file_path}%{else}"$path/tls/server.pem"%{endif}
+key_file_path=%{ if key_file_path != "" }${key_file_path}%{else}"$path/tls/key.pem"%{endif}
 
-curl -O https://raw.githubusercontent.com/hashicorp/terraform-aws-consul/master/modules/install-consul/install-consul -O https://raw.githubusercontent.com/hashicorp/terraform-aws-consul/master/modules/run-consul/run-consul
+curl -O https://raw.githubusercontent.com/chrismatteson/terraform-aws-consul/master/modules/install-consul/install-consul -O https://raw.githubusercontent.com/chrismatteson/terraform-aws-consul/master/modules/run-consul/run-consul
 
 chmod +x ./install-consul
 chmod +x ./run-consul
+cp ./run-consul ../run-consul/run-consul
 /bin/bash ./install-consul %{ if version != "" }--version ${version} %{ endif}%{ if download_url != "" }--download_url ${download_url} %{ endif}%{ if path != "" }--path ${path} %{ endif}%{ if user != "" }--user ${user} %{ endif}
 cp ./run-consul ${path}/bin/run-consul
 %{ if enable_gossip_encryption }
@@ -67,10 +66,15 @@ $path/bin/consul tls cert create -server -ca=$ca_path -key=$ca_private_key_path 
 cp %{ if datacenter != ""}${datacenter}%{ else }dc1%{ endif }-server-consul-0.pem $cert_file_path
 cp %{ if datacenter != ""}${datacenter}%{ else }dc1%{ endif }-server-consul-0-key.pem $key_file_path
 %{ endif }
-/bin/bash $path/bin/run-consul %{ if server == true }--server %{ endif}%{ if client == true }--client %{ endif}%{ if config_dir != "" }--config-dir ${config_dir} %{ endif}%{ if data_dir != "" }--data-dir ${data_dir} %{ endif}%{ if systemd_stdout != "" }--systemd-stdout ${systemd_stdout} %{ endif}%{ if systemd_stderr != "" }--systemd-stderr ${systemd_stderr} %{ endif}%{ if bin_dir != "" }--bin-dir ${bin_dir} %{ endif}%{ if user != "" }--user ${user} %{ endif}%{ if cluster_tag_key != "" }--cluster-tag-key ${cluster_tag_key} %{ endif}%{ if cluster_tag_value != "" }--cluster-tag-value ${cluster_tag_value} %{ endif}%{ if datacenter != "" }--datacenter ${datacenter} %{ endif}%{ if autopilot_cleanup_dead_servers != "" }--autopilot-cleanup-dead-servers ${autopilot_cleanup_dead_servers} %{ endif}%{ if autopilot_last_contact_threshold != "" }--autopilot-last-contact-threshold ${autopilot_last_contact_threshold} %{ endif}%{ if autopilot_max_trailing_logs != "" }--autopilot-max-trailing-logs ${autopilot_max_trailing_logs} %{ endif}%{ if autopilot_server_stabilization_time != "" }--autopilot-server-stabilization-time ${autopilot_server_stabilization_time} %{ endif}%{ if autopilot_redundancy_zone_tag != "" }--autopilot-redundancy-zone-tag ${autopilot_redundancy_zone_tag} %{ endif}%{ if autopilot_disable_upgrade_migration != "" }--autopilot-disable-upgrade-migration ${autopilot_disable_upgrade_migration} %{ endif}%{ if autopilot_upgrade_version_tag != "" }--autopilot-upgrade-version-tag ${autopilot_upgrade_version_tag} %{ endif}%{ if enable_gossip_encryption }--enable-gossip-encryption --gossip-encryption-key $gossip_encrypt_key %{ endif}%{ if enable_rpc_encryption }--enable-rpc-encryption --ca-path $ca_path --cert-file-path $cert_file_path --key-file-path $key_file_path %{ endif}%{ if environment != "" }--environment ${environment} %{ endif }%{ if skip_consul_config != "" }--skip-consul-config ${skip_consul_config} %{ endif}%{ if recursor != "" }--recursor ${recursor} %{ endif}
+%{ if autopilot_redundancy_zone_tag != ""}
+node_meta="{ ${autopilot_redundancy_zone_tag}: `curl http://169.254.169.254/latest/meta-data/placement/availability-zone`}"
+%{ endif }
+/bin/bash $path/bin/run-consul %{ if server == true }--server %{ endif}%{ if client == true }--client %{ endif}%{ if config_dir != "" }--config-dir ${config_dir} %{ endif}%{ if data_dir != "" }--data-dir ${data_dir} %{ endif}%{ if systemd_stdout != "" }--systemd-stdout ${systemd_stdout} %{ endif}%{ if systemd_stderr != "" }--systemd-stderr ${systemd_stderr} %{ endif}%{ if bin_dir != "" }--bin-dir ${bin_dir} %{ endif}%{ if user != "" }--user ${user} %{ endif}%{ if cluster_tag_key != "" }--cluster-tag-key ${cluster_tag_key} %{ endif}%{ if cluster_tag_value != "" }--cluster-tag-value ${cluster_tag_value} %{ endif}%{ if datacenter != "" }--datacenter ${datacenter} %{ endif}%{ if autopilot_cleanup_dead_servers != "" }--autopilot-cleanup-dead-servers ${autopilot_cleanup_dead_servers} %{ endif}%{ if autopilot_last_contact_threshold != "" }--autopilot-last-contact-threshold ${autopilot_last_contact_threshold} %{ endif}%{ if autopilot_max_trailing_logs != "" }--autopilot-max-trailing-logs ${autopilot_max_trailing_logs} %{ endif}%{ if autopilot_server_stabilization_time != "" }--autopilot-server-stabilization-time ${autopilot_server_stabilization_time} %{ endif}%{ if autopilot_redundancy_zone_tag != "" }--autopilot-redundancy-zone-tag ${autopilot_redundancy_zone_tag} --node-meta $node_meta %{ endif}%{ if autopilot_disable_upgrade_migration != "" }--autopilot-disable-upgrade-migration ${autopilot_disable_upgrade_migration} %{ endif}%{ if autopilot_upgrade_version_tag != "" }--autopilot-upgrade-version-tag ${autopilot_upgrade_version_tag} %{ endif}%{ if enable_gossip_encryption }--enable-gossip-encryption --gossip-encryption-key $gossip_encrypt_key %{ endif}%{ if enable_rpc_encryption }--enable-rpc-encryption --ca-path $ca_path --cert-file-path $cert_file_path --key-file-path $key_file_path %{ endif}%{ if environment != "" }--environment ${environment} %{ endif }%{ if skip_consul_config != "" }--skip-consul-config ${skip_consul_config} %{ endif}%{ if recursor != "" }--recursor ${recursor} %{ endif}%{ if enable_acls }--enable-acls %{ endif }
 %{ if consul_ent_license != ""}
-local consul_ent_license=`aws s3 cp s3://${bucket}/gossip_encrypt_key - --sse aws:kms --sse-kms-key-id=${bucketkms}`
-while [ curl http://127.0.0.1:8500/v1/status/leader -eq "" ] do
+echo "Installing Enterprise License"
+consul_ent_license=`aws s3 cp s3://${bucket}/consul_license - --sse aws:kms --sse-kms-key-id=${bucketkms}`
+while [ `curl http://127.0.0.1:8500/v1/status/leader` == "" ]
+do
   echo "Waiting for Consul Cluster to start"
   sleep 3
 done

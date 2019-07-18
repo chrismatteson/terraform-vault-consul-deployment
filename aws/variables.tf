@@ -1,13 +1,16 @@
+variable "prefix" { default = "" }
+variable "ssh_key_name" { default = "" }
+variable "cluster_size" { default = 5 }
 variable "ami_id" { default = "" }
-variable "ami_filter_owners" { 
+variable "ami_filter_owners" {
   description = "When bash install method, use a filter to lookup an image owner and name. Common combinations are 206029621532 and amzn2-ami-hvm* for Amazon Linux 2 HVM, and 099720109477 and ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-* for Ubuntu 18.04"
-  type    = list(string)
-  default = ["099720109477"]
+  type        = list(string)
+  default     = ["099720109477"]
 }
 variable "ami_filter_name" {
   description = "When bash install method, use a filter to lookup an image owner and name. Common combinations are 206029621532 and amzn2-ami-hvm* for Amazon Linux 2 HVM, and 099720109477 and ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-* for Ubuntu 18.04"
-  type    = list(string)
-  default = ["ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-*"]
+  type        = list(string)
+  default     = ["ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-*"]
 }
 variable "vpc_id" { default = "" }
 variable "subnet_ids" { default = "" }
@@ -34,7 +37,7 @@ variable "autopilot_cleanup_dead_servers" { default = "" }
 variable "autopilot_last_contact_threshold" { default = "" }
 variable "autopilot_max_trailing_logs" { default = "" }
 variable "autopilot_server_stabilization_time" { default = "" }
-variable "autopilot_redundancy_zone_tag" { default = "" }
+variable "autopilot_redundancy_zone_tag" { default = "az" }
 variable "autopilot_disable_upgrade_migration" { default = "" }
 variable "autopilot_upgrade_version_tag" { default = "" }
 variable "enable_gossip_encryption" { default = true }
@@ -48,3 +51,4 @@ variable "tags" {
   type        = list(object({ key : string, value : string, propagate_at_launch : bool }))
   default     = []
 }
+variable "enable_acls" { default = false }

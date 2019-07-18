@@ -52,27 +52,27 @@ resource "tls_private_key" "private_key" {
 }
 
 resource "random_integer" "serial_number" {
-  min     = 1000000000
-  max     = 9999999999
+  min = 1000000000
+  max = 9999999999
   lifecycle {
     create_before_destroy = true
   }
 }
 
 resource "tls_self_signed_cert" "ca" {
-  key_algorithm   = "ECDSA"
-  private_key_pem = tls_private_key.private_key.private_key_pem
-  is_ca_certificate = true
+  key_algorithm         = "ECDSA"
+  private_key_pem       = tls_private_key.private_key.private_key_pem
+  is_ca_certificate     = true
   validity_period_hours = 43800
 
   subject {
-    common_name = "Consul Agent CA ${random_integer.serial_number.result}${random_integer.serial_number.result}"
-    country     = "US"
-    postal_code = "94105"
-    province    = "CA"
-    locality    = "San Francisco"
+    common_name    = "Consul Agent CA ${random_integer.serial_number.result}${random_integer.serial_number.result}"
+    country        = "US"
+    postal_code    = "94105"
+    province       = "CA"
+    locality       = "San Francisco"
     street_address = ["101 Second Street"]
-    organization = "HashiCorp Inc."
+    organization   = "HashiCorp Inc."
   }
   allowed_uses = [
     "digital_signature",
@@ -122,17 +122,17 @@ resource "aws_s3_bucket_object" "private_key" {
 }
 
 resource "aws_s3_bucket_object" "ca_cert" {
-  key        = "ca.pem"
-  bucket     = aws_s3_bucket.consul_setup.id
-  content    = tls_self_signed_cert.ca.cert_pem
+  key     = "ca.pem"
+  bucket  = aws_s3_bucket.consul_setup.id
+  content = tls_self_signed_cert.ca.cert_pem
   lifecycle {
     create_before_destroy = true
   }
 }
 
 resource "aws_s3_bucket_object" "consul_license" {
-  count      = var.consul_ent_license != "" ? 1: 0
-  key        = "ca.pem"
+  count      = var.consul_ent_license != "" ? 1 : 0
+  key        = "consul_license"
   bucket     = aws_s3_bucket.consul_setup.id
   content    = var.consul_ent_license
   kms_key_id = aws_kms_key.bucketkms.arn
@@ -180,29 +180,30 @@ resource "aws_iam_role_policy" "bucketkms" {
 
 # Lookup most recent AMI
 data "aws_ami" "latest-image" {
-most_recent = true
-owners = var.ami_filter_owners
+  most_recent = true
+  owners      = var.ami_filter_owners
 
   filter {
-      name   = "name"
-      values = var.ami_filter_name
+    name   = "name"
+    values = var.ami_filter_name
   }
 
   filter {
-      name   = "virtualization-type"
-      values = ["hvm"]
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 }
 
 module "consul" {
-#  source                      = "hashicorp/consul/aws"
-  source = "git::git@github.com:hashicorp/terraform-aws-consul.git//modules/consul-cluster?ref=v0.7.1"
+  #  source                      = "hashicorp/consul/aws"
+  source                      = "git::git@github.com:hashicorp/terraform-aws-consul.git//modules/consul-cluster?ref=v0.7.1"
   ami_id                      = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
   cluster_name                = random_id.project_name.hex
+  cluster_size                = var.cluster_size
   instance_type               = "t2.small"
   vpc_id                      = module.vpc.vpc_id
   subnet_ids                  = module.vpc.public_subnets
-  ssh_key_name                = "chrismatteson-us-east-1"
+  ssh_key_name                = var.ssh_key_name
   allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
   allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
   user_data = templatefile("${path.module}/install-consul.tpl",
@@ -236,10 +237,19 @@ module "consul" {
       environment                         = var.environment,
       skip_consul_config                  = var.skip_consul_config,
       recursor                            = var.recursor,
-      bucket				  = aws_s3_bucket.consul_setup.id,
+      bucket                              = aws_s3_bucket.consul_setup.id,
       bucketkms                           = aws_kms_key.bucketkms.id,
       consul_ent_license                  = var.consul_ent_license,
+      enable_acls                         = var.enable_acls,
     },
   )
 }
+
+# (Future) Install Enterprise license with Lambda
+#module 'lambda' {
+#  source = "https://github.com/chrismatteson/terraform-lambda"
+#  function_name = "${random_id.project_name.hex}-consul-license"
+#  source_files = ["install_license.py"]
+#}
+
 
