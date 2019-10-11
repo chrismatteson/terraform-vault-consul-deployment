@@ -35,55 +35,6 @@ module "vpc" {
   }
 }
 
-# Create Consul Encryption Key
-resource "random_id" "gossip_encrypt_key" {
-  byte_length = 16
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Create Consul CA Certificate
-resource "tls_private_key" "private_key" {
-  algorithm = "ECDSA"
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "random_integer" "serial_number" {
-  min = 1000000000
-  max = 9999999999
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "tls_self_signed_cert" "ca" {
-  key_algorithm         = "ECDSA"
-  private_key_pem       = tls_private_key.private_key.private_key_pem
-  is_ca_certificate     = true
-  validity_period_hours = 43800
-
-  subject {
-    common_name    = "Consul Agent CA ${random_integer.serial_number.result}${random_integer.serial_number.result}"
-    country        = "US"
-    postal_code    = "94105"
-    province       = "CA"
-    locality       = "San Francisco"
-    street_address = ["101 Second Street"]
-    organization   = "HashiCorp Inc."
-  }
-  allowed_uses = [
-    "digital_signature",
-    "cert_signing",
-    "crl_signing",
-  ]
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
 # AWS S3 Bucket for Certificates, Private Keys, Encryption Key, and License
 resource "aws_kms_key" "bucketkms" {
   description             = "${random_id.project_name.hex}-key"
@@ -103,35 +54,6 @@ resource "aws_s3_bucket" "consul_setup" {
     create_before_destroy = true
   }
 }
-
-#resource "aws_s3_bucket_object" "gossip_encrypt_key" {
-#  key        = "gossip_encrypt_key"
-#  bucket     = aws_s3_bucket.consul_setup.id
-#  content    = random_id.gossip_encrypt_key.b64_std
-#  kms_key_id = aws_kms_key.bucketkms.arn
-#  lifecycle {
-#    create_before_destroy = true
-#  }
-#}
-
-#resource "aws_s3_bucket_object" "private_key" {
-#  key        = "ca_private_key.pem"
-#  bucket     = aws_s3_bucket.consul_setup.id
-#  content    = tls_private_key.private_key.private_key_pem
-#  kms_key_id = aws_kms_key.bucketkms.arn
-#  lifecycle {
-#    create_before_destroy = true
-#  }
-#}
-
-#resource "aws_s3_bucket_object" "ca_cert" {
-#  key     = "ca.pem"
-#  bucket  = aws_s3_bucket.consul_setup.id
-#  content = tls_self_signed_cert.ca.cert_pem
-#  lifecycle {
-#    create_before_destroy = true
-#  }
-#}
 
 resource "aws_s3_bucket_object" "consul_license" {
   count      = var.consul_ent_license != "" ? 1 : 0
@@ -178,7 +100,9 @@ data "aws_iam_policy_document" "bucketkms" {
   statement {
     effect = "Allow"
     actions = [
-      "kms:Decrypt"
+      "kms:Decrypt",
+      "kms:Encrypt",
+      "kms:GenerateDataKey"
     ]
     resources = [
       "${aws_kms_key.bucketkms.arn}"
