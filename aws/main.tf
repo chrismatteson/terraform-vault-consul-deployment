@@ -88,6 +88,9 @@ resource "tls_self_signed_cert" "ca" {
 resource "aws_kms_key" "bucketkms" {
   description             = "${random_id.project_name.hex}-key"
   deletion_window_in_days = 7
+  # Add deny all policy to kms key to ensure accessing secrets
+  # is a break-glass proceedure
+  #  policy                  = "arn:aws:iam::aws:policy/AWSDenyAll"
   lifecycle {
     create_before_destroy = true
   }
@@ -101,34 +104,34 @@ resource "aws_s3_bucket" "consul_setup" {
   }
 }
 
-resource "aws_s3_bucket_object" "gossip_encrypt_key" {
-  key        = "gossip_encrypt_key"
-  bucket     = aws_s3_bucket.consul_setup.id
-  content    = random_id.gossip_encrypt_key.b64_std
-  kms_key_id = aws_kms_key.bucketkms.arn
-  lifecycle {
-    create_before_destroy = true
-  }
-}
+#resource "aws_s3_bucket_object" "gossip_encrypt_key" {
+#  key        = "gossip_encrypt_key"
+#  bucket     = aws_s3_bucket.consul_setup.id
+#  content    = random_id.gossip_encrypt_key.b64_std
+#  kms_key_id = aws_kms_key.bucketkms.arn
+#  lifecycle {
+#    create_before_destroy = true
+#  }
+#}
 
-resource "aws_s3_bucket_object" "private_key" {
-  key        = "ca_private_key.pem"
-  bucket     = aws_s3_bucket.consul_setup.id
-  content    = tls_private_key.private_key.private_key_pem
-  kms_key_id = aws_kms_key.bucketkms.arn
-  lifecycle {
-    create_before_destroy = true
-  }
-}
+#resource "aws_s3_bucket_object" "private_key" {
+#  key        = "ca_private_key.pem"
+#  bucket     = aws_s3_bucket.consul_setup.id
+#  content    = tls_private_key.private_key.private_key_pem
+#  kms_key_id = aws_kms_key.bucketkms.arn
+#  lifecycle {
+#    create_before_destroy = true
+#  }
+#}
 
-resource "aws_s3_bucket_object" "ca_cert" {
-  key     = "ca.pem"
-  bucket  = aws_s3_bucket.consul_setup.id
-  content = tls_self_signed_cert.ca.cert_pem
-  lifecycle {
-    create_before_destroy = true
-  }
-}
+#resource "aws_s3_bucket_object" "ca_cert" {
+#  key     = "ca.pem"
+#  bucket  = aws_s3_bucket.consul_setup.id
+#  content = tls_self_signed_cert.ca.cert_pem
+#  lifecycle {
+#    create_before_destroy = true
+#  }
+#}
 
 resource "aws_s3_bucket_object" "consul_license" {
   count      = var.consul_ent_license != "" ? 1 : 0
@@ -146,10 +149,21 @@ data "aws_iam_policy_document" "consul_bucket" {
   statement {
     effect = "Allow"
     actions = [
-      "s3:GetObject"
+      "s3:GetObject",
+      "s3:PutObject"
     ]
     resources = [
       "${aws_s3_bucket.consul_setup.arn}/*"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket"
+    ]
+    resources = [
+      aws_s3_bucket.consul_setup.arn
     ]
   }
 }
