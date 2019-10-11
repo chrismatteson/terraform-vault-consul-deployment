@@ -60,9 +60,14 @@ cp ./run-consul ${path}/bin/run-consul
 aws s3 ls s3://${bucket}/gossip_encrypt_key
 ec=$?
 case $ec in
-  0) gossip_encrypt_key=`aws s3 cp s3://${bucket}/gossip_encrypt_key - --sse aws:kms --sse-kms-key-id=${bucketkms}`
+  0) echo "Gossip Encryption Key already exists"
+     gossip_encrypt_key=`aws s3 cp s3://${bucket}/gossip_encrypt_key - --sse aws:kms --sse-kms-key-id=${bucketkms}`
   ;;
-  1) gossip_encrypt_key=`$path/bin/consul keygen`; cat $gossip_encrypt_key > aws s3 cp - s3://${bucket}/gossip_encrypt_key --sse aws:kms --sse-kms-key-id=${bucketkms}
+  1) echo "Gossip Encryption Key doesn't exist, creating"
+     gossip_encrypt_key=`$path/bin/consul keygen`
+     echo  $gossip_encrypt_key > gossip_encrypt_key
+     aws s3 cp gossip_encrypt_key s3://${bucket}/gossip_encrypt_key --sse aws:kms --sse-kms-key-id=${bucketkms}
+     rm gossip_encrypt_key
   ;;
   *) echo "Error, aws s3 ls for gossip_encrypt_key did not return 0 or 1, but instead $ec"
   ;;
@@ -72,9 +77,12 @@ esac
 aws s3 ls s3://${bucket}/consul-agent-ca-key.pem
 ec=$?
 case $ec in
-  0) aws s3 cp s3://${bucket}/ca.pem $ca_path; aws s3 cp s3://${bucket}/ca_private_key.pem $ca_private_key_path --sse aws:kms --sse-kms-key-id=${bucketkms}
+  0) echo "Consul CA already exists"
+     aws s3 cp s3://${bucket}/consul-agent-ca.pem $ca_path
+     aws s3 cp s3://${bucket}/consul-agent-ca-key.pem $ca_private_key_path --sse aws:kms --sse-kms-key-id=${bucketkms}
   ;;
-  1) $path/bin/consul tls ca create
+  1) echo "Consul CA doesn't exist, creating"
+     $path/bin/consul tls ca create
      cp consul-agent-ca.pem $ca_path
      aws s3 cp consul-agent-ca.pem s3://${bucket}/consul-agent-ca.pem
      cp consul-agent-ca-key.pem $ca_private_key_path

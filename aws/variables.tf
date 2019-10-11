@@ -51,4 +51,4 @@ variable "tags" {
   type        = list(object({ key : string, value : string, propagate_at_launch : bool }))
   default     = []
 }
-variable "enable_acls" { default = false }
+variable "enable_acls" { default = true }
