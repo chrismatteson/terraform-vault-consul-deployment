@@ -88,7 +88,7 @@ case $ec in
      cp consul-agent-ca-key.pem $ca_private_key_path
      aws s3 cp consul-agent-ca-key.pem s3://${bucket}/consul-agent-ca-key.pem --sse aws:kms --sse-kms-key-id=${bucketkms}
   ;;
-  *) echo "Error, aws s3 ls for gossip_encrypt_key did not return 0 or 1, but instead $ec"
+  *) echo "Error, aws s3 ls for consul-agent-ca-key.pem did not return 0 or 1, but instead $ec"
   ;;
 esac
 $path/bin/consul tls cert create -server -ca=$ca_path -key=$ca_private_key_path %{ if datacenter != "" }-dc=${datacenter} %{ endif }
@@ -99,13 +99,31 @@ cp %{ if datacenter != ""}${datacenter}%{ else }dc1%{ endif }-server-consul-0-ke
 node_meta="{ \"${autopilot_redundancy_zone_tag}\": \"`curl http://169.254.169.254/latest/meta-data/placement/availability-zone`\" }"
 %{ endif }
 /bin/bash $path/bin/run-consul %{ if server == true }--server %{ endif}%{ if client == true }--client %{ endif}%{ if config_dir != "" }--config-dir ${config_dir} %{ endif}%{ if data_dir != "" }--data-dir ${data_dir} %{ endif}%{ if systemd_stdout != "" }--systemd-stdout ${systemd_stdout} %{ endif}%{ if systemd_stderr != "" }--systemd-stderr ${systemd_stderr} %{ endif}%{ if bin_dir != "" }--bin-dir ${bin_dir} %{ endif}%{ if user != "" }--user ${user} %{ endif}%{ if cluster_tag_key != "" }--cluster-tag-key ${cluster_tag_key} %{ endif}%{ if cluster_tag_value != "" }--cluster-tag-value ${cluster_tag_value} %{ endif}%{ if datacenter != "" }--datacenter ${datacenter} %{ endif}%{ if autopilot_cleanup_dead_servers != "" }--autopilot-cleanup-dead-servers ${autopilot_cleanup_dead_servers} %{ endif}%{ if autopilot_last_contact_threshold != "" }--autopilot-last-contact-threshold ${autopilot_last_contact_threshold} %{ endif}%{ if autopilot_max_trailing_logs != "" }--autopilot-max-trailing-logs ${autopilot_max_trailing_logs} %{ endif}%{ if autopilot_server_stabilization_time != "" }--autopilot-server-stabilization-time ${autopilot_server_stabilization_time} %{ endif}%{ if autopilot_redundancy_zone_tag != "" }--autopilot-redundancy-zone-tag ${autopilot_redundancy_zone_tag} --node-meta "$node_meta" %{ endif}%{ if autopilot_disable_upgrade_migration != "" }--autopilot-disable-upgrade-migration ${autopilot_disable_upgrade_migration} %{ endif}%{ if autopilot_upgrade_version_tag != "" }--autopilot-upgrade-version-tag ${autopilot_upgrade_version_tag} %{ endif}%{ if enable_gossip_encryption }--enable-gossip-encryption --gossip-encryption-key $gossip_encrypt_key %{ endif}%{ if enable_rpc_encryption }--enable-rpc-encryption --ca-path $ca_path --cert-file-path $cert_file_path --key-file-path $key_file_path %{ endif}%{ if environment != "" }--environment ${environment} %{ endif }%{ if skip_consul_config != "" }--skip-consul-config ${skip_consul_config} %{ endif}%{ if recursor != "" }--recursor ${recursor} %{ endif}%{ if enable_acls }--enable-acls %{ endif }
-%{ if consul_ent_license != ""}
+
+%{ if enable_acls }
+echo "Bootstrapping ACLs"
+aws s3 ls s3://${bucket}/consul-http-token
+ec=$?
+case $ec in
+  0) echo "Consul ACLs already bootstrapped"
+     CONSUL_HTTP_TOKEN=`aws s3 cp s3://${bucket}/consul-http-token - --sse aws:kms --sse-kms-key-id=${bucketkms}`
+     sed -i "/\"acl\":/a \"tokens\": { \"agent\":  \"$CONSUL_HTTP_TOKEN\" }," /opt/consul/config/default.json
+     service consul restart
+  ;;
+  1) echo "Consul ACLs not configured, bootstrapping"
+     CONSUL_HTTP_TOKEN=`uuidgen -r`
+     echo $CONSUL_HTTP_TOKEN > consul-http-token
+     aws s3 cp consul-http-token s3://${bucket}/consul-http-token --sse aws:kms --sse-kms-key-id=${bucketkms}
+     rm consul-http-token
+     $path/bin/consul bootstrap -token=$CONSUL_HTTP_TOKEN
+     sed -i "/\"acl\":/a \"tokens\": { \"agent\":  \"$CONSUL_HTTP_TOKEN\" }," /opt/consul/config/default.json
+     service consul restart 
+  ;;
+  *) echo "Error, aws s3 ls for consul-http-token did not return 0 or 1, but instead $ec"
+  ;;
+esac
+%{ endif }
+%{ if consul_license_arn != "" }
 echo "Installing Enterprise License"
-consul_ent_license=`aws s3 cp s3://${bucket}/consul_license - --sse aws:kms --sse-kms-key-id=${bucketkms}`
-while [ `curl http://127.0.0.1:8500/v1/status/leader` == "" ]
-do
-  echo "Waiting for Consul Cluster to start"
-  sleep 3
-done
-$path/bin/consul license put $consul_ent_license
+aws lambda invoke --function-name ${consul_license_arn}  --payload "{\"CONSUL_SERVER\": \"%{ if enable_consul_http_encryption }https://%{ else }http://%{ endif }`curl http://169.254.169.254/latest/meta-data/local-ipv4`\"}" /dev/null 
 %{ endif }

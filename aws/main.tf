@@ -16,8 +16,6 @@ module "vpc" {
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
 
-  assign_generated_ipv6_cidr_block = true
-
   enable_nat_gateway = true
   single_nat_gateway = true
 
@@ -48,19 +46,9 @@ resource "aws_kms_key" "bucketkms" {
 }
 
 resource "aws_s3_bucket" "consul_setup" {
-  bucket = "${random_id.project_name.hex}-consul-setup"
-  acl    = "private"
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_s3_bucket_object" "consul_license" {
-  count      = var.consul_ent_license != "" ? 1 : 0
-  key        = "consul_license"
-  bucket     = aws_s3_bucket.consul_setup.id
-  content    = var.consul_ent_license
-  kms_key_id = aws_kms_key.bucketkms.arn
+  bucket        = "${random_id.project_name.hex}-consul-setup"
+  acl           = "private"
+  force_destroy = var.force_bucket_destroy
   lifecycle {
     create_before_destroy = true
   }
@@ -132,9 +120,19 @@ data "aws_ami" "latest-image" {
   }
 }
 
+module "lambda" {
+  source = "github.com/chrismatteson/terraform-lambda"
+  function_name = "${random_id.project_name.hex}-consul-license"
+  source_files = [{content="install_license.py", filename="install_license.py"}]
+  environment_variables = {"LICENSE"=var.consul_ent_license} 
+  handler = "install_license.lambda_handler"
+  subnet_ids = module.vpc.public_subnets
+  security_group_ids = [module.vpc.default_security_group_id]
+}
+
 module "consul" {
   #  source                      = "hashicorp/consul/aws"
-  source                      = "git::git@github.com:hashicorp/terraform-aws-consul.git//modules/consul-cluster?ref=v0.7.1"
+  source                      = "github.com/hashicorp/terraform-aws-consul.git//modules/consul-cluster?ref=v0.7.1"
   ami_id                      = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
   cluster_name                = random_id.project_name.hex
   cluster_size                = var.cluster_size
@@ -144,6 +142,7 @@ module "consul" {
   ssh_key_name                = var.ssh_key_name
   allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
   allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
+  enabled_metrics             = ["GroupTotalInstances"]
   user_data = templatefile("${path.module}/install-consul.tpl",
     {
       version                             = var.consul_version,
@@ -177,17 +176,28 @@ module "consul" {
       recursor                            = var.recursor,
       bucket                              = aws_s3_bucket.consul_setup.id,
       bucketkms                           = aws_kms_key.bucketkms.id,
-      consul_ent_license                  = var.consul_ent_license,
+      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "", 
       enable_acls                         = var.enable_acls,
+      enable_consul_http_encryption       = var.enable_consul_http_encryption,
     },
   )
 }
 
-# (Future) Install Enterprise license with Lambda
-#module 'lambda' {
-#  source = "https://github.com/chrismatteson/terraform-lambda"
-#  function_name = "${random_id.project_name.hex}-consul-license"
-#  source_files = ["install_license.py"]
-#}
+resource "aws_iam_role_policy_attachment" "SystemsManager" {
+  role = module.consul.iam_role_id
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
 
+data "aws_iam_policy_document" "invoke_lambda" {
+  statement {
+            effect = "Allow"
+            actions = ["lambda:InvokeFunction"]
+            resources = [module.lambda.arn]
+  }
+}
 
+resource "aws_iam_role_policy" "InvokeLambda" {
+  name   = "${random_id.project_name.id}-invoke-lambda"
+  role = module.consul.iam_role_id
+  policy = data.aws_iam_policy_document.invoke_lambda.json
+}

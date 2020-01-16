@@ -52,3 +52,9 @@ variable "tags" {
   default     = []
 }
 variable "enable_acls" { default = true }
+variable "force_bucket_destroy" {
+  description = "Boolean to force destruction of s3 buckets"
+  default     = false
+  type        = bool
+}
+variable "enable_consul_http_encryption" { default = false }
