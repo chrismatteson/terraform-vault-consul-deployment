@@ -146,6 +146,59 @@ echo "Installing Enterprise License"
 aws configure set region `curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region`
 aws lambda invoke --function-name ${consul_license_arn}  --payload "{\"consul_server\": \"%{ if enable_consul_http_encryption }https://%{ else }http://%{ endif }`curl http://169.254.169.254/latest/meta-data/local-ipv4`\"%{ if enable_acls }, \"token\": \"`echo $CONSUL_HTTP_TOKEN`\"%{ endif} }" /dev/null 
 
-echo "Configure Consul Backup'
+echo "Configure Consul Backup"
+consul_backup_config=$(cat <<EOF
+  {
+    "snapshot_agent": {
+      "http_addr": "127.0.0.1:8500",
+      "token": "$${CONSUL_HTTP_TOKEN}",
+      "log": {
+        "level": "INFO",
+        "enable_syslog": false,
+        "syslog_facility": "LOCAL0"
+      },
+      "snapshot": {
+        "interval": "1h",
+        "retain": 30,
+        "stale": false,
+        "service": "consul-snapshot",
+        "deregister_after": "72h",
+        "lock_key": "consul-snapshot/lock",
+        "max_failures": 3
+      },
+      "aws_storage": {
+        "s3_bucket": "${consul_backup_bucket}",
+        "s3_region": `curl http://169.254.169.254/latest/dynamic/instance-identity/document | jq .region`, 
+        "s3_key_prefix": "consul-snapshot",
+        "s3_server_side_encryption":false
+      }
+    }
+  }
+EOF
+)
+echo -e "$consul_backup_config" > /opt/consul/config/backup.json
+
+consul_backup_service=$(cat <<EOF
+[Unit]
+Description="HashiCorp Consul Enterprise Backup"
+Documentation=https://www.consul.io/
+Requires=network-online.target
+After=network-online.target
+ConditionFileNotEmpty=/opt/consul/config/backup.json
+[Service]
+Type=notify
+User=consul
+Group=consul
+ExecStart=/opt/consul/bin/consul snapshot agent -config-dir /opt/consul/config
+KillMode=process
+Restart=on-failure
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo -e "$consul_backup_service" > /etc/systemd/system/consulbackup.service
+service consulbackup start
 
 %{ endif }

@@ -188,6 +188,7 @@ module "consul" {
       consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "", 
       enable_acls                         = var.enable_acls,
       enable_consul_http_encryption       = var.enable_consul_http_encryption,
+      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
     },
   )
 }
