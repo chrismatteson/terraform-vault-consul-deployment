@@ -109,6 +109,7 @@ done
 %{ if enable_acls }
 echo "Bootstrapping ACLs"
 curl localhost:8500/v1/status/leader | grep `curl http://169.254.169.254/latest/meta-data/local-ipv4`
+ec=$?
 case $ec in
   0) echo "This is the leader"
   ;;
@@ -117,6 +118,7 @@ case $ec in
   ;;
   *) echo "Error, curl for cluster leader did not return 0 or 1, but instead $ec"
   ;;
+esac
 
 aws s3 ls s3://${bucket}/consul-http-token
 ec=$?
@@ -143,4 +145,7 @@ esac
 echo "Installing Enterprise License"
 aws configure set region `curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region`
 aws lambda invoke --function-name ${consul_license_arn}  --payload "{\"consul_server\": \"%{ if enable_consul_http_encryption }https://%{ else }http://%{ endif }`curl http://169.254.169.254/latest/meta-data/local-ipv4`\"%{ if enable_acls }, \"token\": \"`echo $CONSUL_HTTP_TOKEN`\"%{ endif} }" /dev/null 
+
+echo "Configure Consul Backup'
+
 %{ endif }

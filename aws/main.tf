@@ -54,6 +54,15 @@ resource "aws_s3_bucket" "consul_setup" {
   }
 }
 
+# AWS S3 Bucket for Consul Backups
+resource "aws_s3_bucket" "consul_backups" {
+  count         = var.consul_ent_license != "" ? 1 : 0
+  bucket        = "${random_id.project_name.hex}-consul-backups"
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 # Create IAM policy to allow Consul to reach S3 bucket and KMS key
 data "aws_iam_policy_document" "consul_bucket" {
   statement {
