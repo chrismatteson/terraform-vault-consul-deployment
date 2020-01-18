@@ -100,7 +100,7 @@ node_meta="{ \"${autopilot_redundancy_zone_tag}\": \"`curl http://169.254.169.25
 %{ endif }
 /bin/bash $path/bin/run-consul %{ if server == true }--server %{ endif}%{ if client == true }--client %{ endif}%{ if config_dir != "" }--config-dir ${config_dir} %{ endif}%{ if data_dir != "" }--data-dir ${data_dir} %{ endif}%{ if systemd_stdout != "" }--systemd-stdout ${systemd_stdout} %{ endif}%{ if systemd_stderr != "" }--systemd-stderr ${systemd_stderr} %{ endif}%{ if bin_dir != "" }--bin-dir ${bin_dir} %{ endif}%{ if user != "" }--user ${user} %{ endif}%{ if cluster_tag_key != "" }--cluster-tag-key ${cluster_tag_key} %{ endif}%{ if cluster_tag_value != "" }--cluster-tag-value ${cluster_tag_value} %{ endif}%{ if datacenter != "" }--datacenter ${datacenter} %{ endif}%{ if autopilot_cleanup_dead_servers != "" }--autopilot-cleanup-dead-servers ${autopilot_cleanup_dead_servers} %{ endif}%{ if autopilot_last_contact_threshold != "" }--autopilot-last-contact-threshold ${autopilot_last_contact_threshold} %{ endif}%{ if autopilot_max_trailing_logs != "" }--autopilot-max-trailing-logs ${autopilot_max_trailing_logs} %{ endif}%{ if autopilot_server_stabilization_time != "" }--autopilot-server-stabilization-time ${autopilot_server_stabilization_time} %{ endif}%{ if autopilot_redundancy_zone_tag != "" }--autopilot-redundancy-zone-tag ${autopilot_redundancy_zone_tag} --node-meta "$node_meta" %{ endif}%{ if autopilot_disable_upgrade_migration != "" }--autopilot-disable-upgrade-migration ${autopilot_disable_upgrade_migration} %{ endif}%{ if autopilot_upgrade_version_tag != "" }--autopilot-upgrade-version-tag ${autopilot_upgrade_version_tag} %{ endif}%{ if enable_gossip_encryption }--enable-gossip-encryption --gossip-encryption-key $gossip_encrypt_key %{ endif}%{ if enable_rpc_encryption }--enable-rpc-encryption --ca-path $ca_path --cert-file-path $cert_file_path --key-file-path $key_file_path %{ endif}%{ if environment != "" }--environment ${environment} %{ endif }%{ if skip_consul_config != "" }--skip-consul-config ${skip_consul_config} %{ endif}%{ if recursor != "" }--recursor ${recursor} %{ endif}%{ if enable_acls }--enable-acls %{ endif }
 echo "Wait for cluster to load"
-until consul operator raft list-peers 2>&1 | grep 'Voter\|403'
+until curl localhost:8500/v1/status/leader | grep :
 do
   echo "Sleeping for 10 seconds to wait for cluster leader"
   sleep 10
@@ -108,6 +108,16 @@ done
 
 %{ if enable_acls }
 echo "Bootstrapping ACLs"
+curl localhost:8500/v1/status/leader | grep `curl http://169.254.169.254/latest/meta-data/local-ipv4`
+case $ec in
+  0) echo "This is the leader"
+  ;;
+  1) echo "This is a follower"
+     sleep 20
+  ;;
+  *) echo "Error, curl for cluster leader did not return 0 or 1, but instead $ec"
+  ;;
+
 aws s3 ls s3://${bucket}/consul-http-token
 ec=$?
 case $ec in
