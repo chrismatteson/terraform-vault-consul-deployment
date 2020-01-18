@@ -7,8 +7,11 @@ def lambda_handler(event, context):
   LICENSE = os.environ.get('LICENSE')
   data = LICENSE
   req = urllib2.Request(url, data)
-  try: token = event['token']
-    req.add_header('X-Consul-Token', token)
+  try:
+      token = event['token']
+      req.add_header('X-Consul-Token', token)
+  except:
+      print('no token defined')
   req.get_method = lambda: 'PUT'
   f = urllib2.urlopen(req)
   for x in f:
