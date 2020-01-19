@@ -47,9 +47,9 @@ variable "environment" { default = "" }
 variable "skip_consul_config" { default = "" }
 variable "recursor" { default = "" }
 variable "tags" {
-  description = "List of extra tag blocks added to the autoscaling group configuration. Each element in the list is a map containing keys 'key', 'value', and 'propagate_at_launch' mapped to the respective values."
-  type        = list(object({ key : string, value : string, propagate_at_launch : bool }))
-  default     = []
+  description = "Map of extra tags to attach to items which accept them"
+  type        = map(string)
+  default     = {}
 }
 variable "enable_acls" { default = true }
 variable "force_bucket_destroy" {

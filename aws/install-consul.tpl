@@ -197,7 +197,7 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 EOF
-
+)
 echo -e "$consul_backup_service" > /etc/systemd/system/consulbackup.service
 service consulbackup start
 

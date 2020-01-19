@@ -6,6 +6,16 @@ resource "random_id" "project_name" {
   byte_length = 4
 }
 
+# Local for tag to attach to all items
+locals {
+  tags = merge(
+    var.tags,
+    {
+      "ProjectName" = random_id.project_name.hex
+    },
+  )
+}
+
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
   name   = "${random_id.project_name.hex}"
@@ -23,10 +33,7 @@ module "vpc" {
     Name = "overridden-name-public"
   }
 
-  tags = {
-    Owner       = "cmatteson"
-    Environment = "dev"
-  }
+  tags = local.tags
 
   vpc_tags = {
     Name = "${random_id.project_name.hex}-vpc"
@@ -43,6 +50,7 @@ resource "aws_kms_key" "bucketkms" {
   lifecycle {
     create_before_destroy = true
   }
+  tags = local.tags
 }
 
 resource "aws_s3_bucket" "consul_setup" {
@@ -52,6 +60,7 @@ resource "aws_s3_bucket" "consul_setup" {
   lifecycle {
     create_before_destroy = true
   }
+  tags = local.tags
 }
 
 # AWS S3 Bucket for Consul Backups
@@ -61,6 +70,7 @@ resource "aws_s3_bucket" "consul_backups" {
   lifecycle {
     create_before_destroy = true
   }
+  tags = local.tags
 }
 
 # Create IAM policy to allow Consul to reach S3 bucket and KMS key
@@ -113,6 +123,38 @@ resource "aws_iam_role_policy" "bucketkms" {
   policy = data.aws_iam_policy_document.bucketkms.json
 }
 
+# Create IAM policy to allow Consul backups to reach S3 bucket
+data "aws_iam_policy_document" "consul_backups" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:ListBucket",
+      "s3:ListBucketVersions"
+    ]
+    resources = [
+      "${aws_s3_bucket.consul_backups[0].arn}/*"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket"
+    ]
+    resources = [
+      aws_s3_bucket.consul_backups[0].arn
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "consul_backups" {
+  name   = "${random_id.project_name.id}-consul-backups"
+  role   = module.consul.iam_role_id
+  policy = data.aws_iam_policy_document.consul_backups.json
+}
+
 # Lookup most recent AMI
 data "aws_ami" "latest-image" {
   most_recent = true
@@ -152,6 +194,14 @@ module "consul" {
   allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
   allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
   enabled_metrics             = ["GroupTotalInstances"]
+  tags                        = [
+    for k, v in local.tags:
+    {
+      key: k
+      value: v
+      propagate_at_launch: true
+    }
+  ]
   user_data = templatefile("${path.module}/install-consul.tpl",
     {
       version                             = var.consul_version,
