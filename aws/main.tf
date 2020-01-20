@@ -67,6 +67,7 @@ resource "aws_s3_bucket" "consul_setup" {
 resource "aws_s3_bucket" "consul_backups" {
   count         = var.consul_ent_license != "" ? 1 : 0
   bucket        = "${random_id.project_name.hex}-consul-backups"
+  force_destroy = var.force_bucket_destroy
   lifecycle {
     create_before_destroy = true
   }
@@ -99,7 +100,7 @@ data "aws_iam_policy_document" "consul_bucket" {
 
 resource "aws_iam_role_policy" "consul_bucket" {
   name   = "${random_id.project_name.id}-consul-bucket"
-  role   = module.consul.iam_role_id
+  role   = aws_iam_role.instance_role.id
   policy = data.aws_iam_policy_document.consul_bucket.json
 }
 
@@ -119,7 +120,7 @@ data "aws_iam_policy_document" "bucketkms" {
 
 resource "aws_iam_role_policy" "bucketkms" {
   name   = "${random_id.project_name.id}-bucketkms"
-  role   = module.consul.iam_role_id
+  role   = aws_iam_role.instance_role.id
   policy = data.aws_iam_policy_document.bucketkms.json
 }
 
@@ -151,7 +152,7 @@ data "aws_iam_policy_document" "consul_backups" {
 
 resource "aws_iam_role_policy" "consul_backups" {
   name   = "${random_id.project_name.id}-consul-backups"
-  role   = module.consul.iam_role_id
+  role   = aws_iam_role.instance_role.id
   policy = data.aws_iam_policy_document.consul_backups.json
 }
 
@@ -172,36 +173,167 @@ data "aws_ami" "latest-image" {
 }
 
 module "lambda" {
-  source = "github.com/chrismatteson/terraform-lambda"
-  function_name = "${random_id.project_name.hex}-consul-license"
-  source_files = [{content="install_license.py", filename="install_license.py"}]
-  environment_variables = {"LICENSE"=var.consul_ent_license} 
-  handler = "install_license.lambda_handler"
-  subnet_ids = module.vpc.public_subnets
-  security_group_ids = [module.vpc.default_security_group_id]
+  source                = "github.com/chrismatteson/terraform-lambda"
+  function_name         = "${random_id.project_name.hex}-consul-license"
+  source_files          = [{ content = "install_license.py", filename = "install_license.py" }]
+  environment_variables = { "LICENSE" = var.consul_ent_license }
+  handler               = "install_license.lambda_handler"
+  subnet_ids            = module.vpc.public_subnets
+  security_group_ids    = [module.vpc.default_security_group_id]
+}
+
+#module "consul" {
+#  #  source                      = "hashicorp/consul/aws"
+#  source                      = "github.com/hashicorp/terraform-aws-consul.git//modules/consul-cluster?ref=v0.7.1"
+#  ami_id                      = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
+#  cluster_name                = random_id.project_name.hex
+#  cluster_size                = var.cluster_size
+#  instance_type               = "t2.small"
+#  vpc_id                      = module.vpc.vpc_id
+#  subnet_ids                  = module.vpc.public_subnets
+#  ssh_key_name                = var.ssh_key_name
+#  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
+#  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
+#  enabled_metrics             = ["GroupTotalInstances"]
+#  tags                        = [
+#    for k, v in local.tags:
+#    {
+#      key: k
+#      value: v
+#      propagate_at_launch: true
+#    }
+#  ]
+#  user_data = templatefile("${path.module}/install-consul.tpl",
+#    {
+#      version                             = var.consul_version,
+#      download_url                        = var.download_url,
+#      path                                = var.path,
+#      user                                = var.user,
+#      ca_path                             = var.ca_path,
+#      cert_file_path                      = var.cert_file_path,
+#      key_file_path                       = var.key_file_path,
+#      server                              = var.server,
+#      client                              = var.client,
+#      config_dir                          = var.config_dir,
+#      data_dir                            = var.data_dir,
+#      systemd_stdout                      = var.systemd_stdout,
+#      systemd_stderr                      = var.systemd_stderr,
+#      bin_dir                             = var.bin_dir,
+#      cluster_tag_key                     = var.cluster_tag_key,
+#      cluster_tag_value                   = var.cluster_tag_value,
+#      datacenter                          = var.datacenter,
+#      autopilot_cleanup_dead_servers      = var.autopilot_cleanup_dead_servers,
+#      autopilot_last_contact_threshold    = var.autopilot_last_contact_threshold,
+#      autopilot_max_trailing_logs         = var.autopilot_max_trailing_logs,
+#      autopilot_server_stabilization_time = var.autopilot_server_stabilization_time,
+#      autopilot_redundancy_zone_tag       = var.autopilot_redundancy_zone_tag,
+#      autopilot_disable_upgrade_migration = var.autopilot_disable_upgrade_migration,
+#      autopilot_upgrade_version_tag       = var.autopilot_upgrade_version_tag,
+#      enable_gossip_encryption            = var.enable_gossip_encryption,
+#      enable_rpc_encryption               = var.enable_rpc_encryption,
+#      environment                         = var.environment,
+#      skip_consul_config                  = var.skip_consul_config,
+#      recursor                            = var.recursor,
+#      bucket                              = aws_s3_bucket.consul_setup.id,
+#      bucketkms                           = aws_kms_key.bucketkms.id,
+#      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "", 
+#      enable_acls                         = var.enable_acls,
+#      enable_consul_http_encryption       = var.enable_consul_http_encryption,
+#      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
+#    },
+#  )
+#}
+
+resource "aws_iam_instance_profile" "instance_profile" {
+  name_prefix = "${random_id.project_name.id}-instance_profile"
+  role        = aws_iam_role.instance_role.name
+
+  # aws_launch_configuration.launch_configuration in this module sets create_before_destroy to true, which means
+  # everything it depends on, including this resource, must set it as well, or you'll get cyclic dependency errors
+  # when you try to do a terraform destroy.
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_iam_role" "instance_role" {
+  name_prefix        = "${random_id.project_name.id}-instance-role"
+  assume_role_policy = data.aws_iam_policy_document.instance_role.json
+
+  # aws_iam_instance_profile.instance_profile in this module sets create_before_destroy to true, which means
+  # everything it depends on, including this resource, must set it as well, or you'll get cyclic dependency errors
+  # when you try to do a terraform destroy.
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+data "aws_iam_policy_document" "instance_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "auto_discover_cluster" {
+  name   = "auto-discover-cluster"
+  role   = aws_iam_role.instance_role.name
+  policy = data.aws_iam_policy_document.auto_discover_cluster.json
+}
+
+data "aws_iam_policy_document" "auto_discover_cluster" {
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "ec2:DescribeInstances",
+      "ec2:DescribeTags",
+      "autoscaling:DescribeAutoScalingGroups",
+    ]
+
+    resources = ["*"]
+  }
 }
 
 module "consul" {
-  #  source                      = "hashicorp/consul/aws"
-  source                      = "github.com/hashicorp/terraform-aws-consul.git//modules/consul-cluster?ref=v0.7.1"
-  ami_id                      = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
-  cluster_name                = random_id.project_name.hex
-  cluster_size                = var.cluster_size
-  instance_type               = "t2.small"
-  vpc_id                      = module.vpc.vpc_id
-  subnet_ids                  = module.vpc.public_subnets
-  ssh_key_name                = var.ssh_key_name
-  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
-  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
-  enabled_metrics             = ["GroupTotalInstances"]
-  tags                        = [
-    for k, v in local.tags:
-    {
-      key: k
-      value: v
-      propagate_at_launch: true
-    }
-  ]
+  source            = "terraform-aws-modules/autoscaling/aws"
+  version           = "3.4.0"
+  image_id          = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
+  name              = "${random_id.project_name.hex}-consul"
+  health_check_type = "EC2"
+  max_size          = var.cluster_size
+  min_size          = var.cluster_size
+  desired_capacity  = var.cluster_size
+  instance_type     = "t2.small"
+  #  vpc_id                      = module.vpc.vpc_id
+  vpc_zone_identifier = module.vpc.public_subnets
+  key_name            = var.ssh_key_name
+  #  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
+  #  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
+  enabled_metrics      = ["GroupTotalInstances"]
+  iam_instance_profile = aws_iam_instance_profile.instance_profile.name
+  tags = concat(
+    [
+      for k, v in local.tags :
+      {
+        key : k
+        value : v
+        propagate_at_launch : true
+      }
+    ],
+    [
+      {
+        key                 = var.cluster_tag_key
+        value               = var.cluster_tag_value
+        propagate_at_launch = true
+      }
+    ]
+  )
   user_data = templatefile("${path.module}/install-consul.tpl",
     {
       version                             = var.consul_version,
@@ -235,7 +367,7 @@ module "consul" {
       recursor                            = var.recursor,
       bucket                              = aws_s3_bucket.consul_setup.id,
       bucketkms                           = aws_kms_key.bucketkms.id,
-      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "", 
+      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "",
       enable_acls                         = var.enable_acls,
       enable_consul_http_encryption       = var.enable_consul_http_encryption,
       consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
@@ -244,20 +376,58 @@ module "consul" {
 }
 
 resource "aws_iam_role_policy_attachment" "SystemsManager" {
-  role = module.consul.iam_role_id
+  role       = aws_iam_role.instance_role.id
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 data "aws_iam_policy_document" "invoke_lambda" {
   statement {
-            effect = "Allow"
-            actions = ["lambda:InvokeFunction"]
-            resources = [module.lambda.arn]
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [module.lambda.arn]
   }
 }
 
 resource "aws_iam_role_policy" "InvokeLambda" {
   name   = "${random_id.project_name.id}-invoke-lambda"
-  role = module.consul.iam_role_id
+  role   = aws_iam_role.instance_role.id
   policy = data.aws_iam_policy_document.invoke_lambda.json
+}
+
+# Install Vault
+module "vault" {
+  source            = "terraform-aws-modules/autoscaling/aws"
+  version           = "3.4.0"
+  image_id          = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
+  name              = "${random_id.project_name.hex}-vault"
+  health_check_type = "EC2"
+  max_size          = var.cluster_size
+  min_size          = var.cluster_size
+  desired_capacity  = var.cluster_size
+  instance_type     = "t2.small"
+  #  vpc_id                      = module.vpc.vpc_id
+  vpc_zone_identifier = module.vpc.public_subnets
+  key_name            = var.ssh_key_name
+  #  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
+  #  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
+  enabled_metrics      = ["GroupTotalInstances"]
+  iam_instance_profile = aws_iam_instance_profile.instance_profile.name
+  tags = [
+    for k, v in local.tags :
+    {
+      key : k
+      value : v
+      propagate_at_launch : true
+    }
+  ]
+  user_data = templatefile("${path.module}/install-vault.tpl",
+    {
+      consul_version    = "1.6.1+ent",
+      consul_binary     = "",
+      cluster_tag_key   = var.cluster_tag_key,
+      cluster_tag_value = var.cluster_tag_value,
+      vault_version     = "1.3.1+ent",
+      vault_binary      = "",
+    },
+  )
 }
