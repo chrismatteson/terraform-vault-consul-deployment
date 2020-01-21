@@ -17,7 +17,7 @@ variable "subnet_ids" { default = "" }
 variable "consul_ent_license" { default = "" }
 variable "vault_ent_license" { default = "" }
 variable "consul_version" { default = "" }
-variable "download_url" { default = "" }
+variable "consul_download_url" { default = "" }
 variable "cluster_tag_key" { default = "consul-servers" }
 variable "cluster_tag_value" { default = "auto-join" }
 variable "path" { default = "/opt/consul" }
@@ -44,7 +44,6 @@ variable "enable_gossip_encryption" { default = true }
 variable "gossip_encryption_key" { default = "" }
 variable "enable_rpc_encryption" { default = true }
 variable "environment" { default = "" }
-variable "skip_consul_config" { default = "" }
 variable "recursor" { default = "" }
 variable "tags" {
   description = "Map of extra tags to attach to items which accept them"

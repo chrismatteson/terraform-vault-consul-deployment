@@ -182,68 +182,6 @@ module "lambda" {
   security_group_ids    = [module.vpc.default_security_group_id]
 }
 
-#module "consul" {
-#  #  source                      = "hashicorp/consul/aws"
-#  source                      = "github.com/hashicorp/terraform-aws-consul.git//modules/consul-cluster?ref=v0.7.1"
-#  ami_id                      = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
-#  cluster_name                = random_id.project_name.hex
-#  cluster_size                = var.cluster_size
-#  instance_type               = "t2.small"
-#  vpc_id                      = module.vpc.vpc_id
-#  subnet_ids                  = module.vpc.public_subnets
-#  ssh_key_name                = var.ssh_key_name
-#  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
-#  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
-#  enabled_metrics             = ["GroupTotalInstances"]
-#  tags                        = [
-#    for k, v in local.tags:
-#    {
-#      key: k
-#      value: v
-#      propagate_at_launch: true
-#    }
-#  ]
-#  user_data = templatefile("${path.module}/install-consul.tpl",
-#    {
-#      version                             = var.consul_version,
-#      download_url                        = var.download_url,
-#      path                                = var.path,
-#      user                                = var.user,
-#      ca_path                             = var.ca_path,
-#      cert_file_path                      = var.cert_file_path,
-#      key_file_path                       = var.key_file_path,
-#      server                              = var.server,
-#      client                              = var.client,
-#      config_dir                          = var.config_dir,
-#      data_dir                            = var.data_dir,
-#      systemd_stdout                      = var.systemd_stdout,
-#      systemd_stderr                      = var.systemd_stderr,
-#      bin_dir                             = var.bin_dir,
-#      cluster_tag_key                     = var.cluster_tag_key,
-#      cluster_tag_value                   = var.cluster_tag_value,
-#      datacenter                          = var.datacenter,
-#      autopilot_cleanup_dead_servers      = var.autopilot_cleanup_dead_servers,
-#      autopilot_last_contact_threshold    = var.autopilot_last_contact_threshold,
-#      autopilot_max_trailing_logs         = var.autopilot_max_trailing_logs,
-#      autopilot_server_stabilization_time = var.autopilot_server_stabilization_time,
-#      autopilot_redundancy_zone_tag       = var.autopilot_redundancy_zone_tag,
-#      autopilot_disable_upgrade_migration = var.autopilot_disable_upgrade_migration,
-#      autopilot_upgrade_version_tag       = var.autopilot_upgrade_version_tag,
-#      enable_gossip_encryption            = var.enable_gossip_encryption,
-#      enable_rpc_encryption               = var.enable_rpc_encryption,
-#      environment                         = var.environment,
-#      skip_consul_config                  = var.skip_consul_config,
-#      recursor                            = var.recursor,
-#      bucket                              = aws_s3_bucket.consul_setup.id,
-#      bucketkms                           = aws_kms_key.bucketkms.id,
-#      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "", 
-#      enable_acls                         = var.enable_acls,
-#      enable_consul_http_encryption       = var.enable_consul_http_encryption,
-#      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
-#    },
-#  )
-#}
-
 resource "aws_iam_instance_profile" "instance_profile" {
   name_prefix = "${random_id.project_name.id}-instance_profile"
   role        = aws_iam_role.instance_role.name
@@ -300,6 +238,50 @@ data "aws_iam_policy_document" "auto_discover_cluster" {
   }
 }
 
+module "compress" {
+  source   = "github.com/chrismatteson/terraform-compress-userdata"
+  filename = "userdata.sh"
+  shell    = "bash"
+  content = templatefile("${path.module}/install-consul.tpl",
+    {
+      consul_version                      = var.consul_version,
+      consul_download_url                 = var.consul_download_url,
+      path                                = var.path,
+      user                                = var.user,
+      ca_path                             = var.ca_path,
+      cert_file_path                      = var.cert_file_path,
+      key_file_path                       = var.key_file_path,
+      server                              = var.server,
+      client                              = var.client,
+      config_dir                          = var.config_dir,
+      data_dir                            = var.data_dir,
+      systemd_stdout                      = var.systemd_stdout,
+      systemd_stderr                      = var.systemd_stderr,
+      bin_dir                             = var.bin_dir,
+      cluster_tag_key                     = var.cluster_tag_key,
+      cluster_tag_value                   = var.cluster_tag_value,
+      datacenter                          = var.datacenter,
+      autopilot_cleanup_dead_servers      = var.autopilot_cleanup_dead_servers,
+      autopilot_last_contact_threshold    = var.autopilot_last_contact_threshold,
+      autopilot_max_trailing_logs         = var.autopilot_max_trailing_logs,
+      autopilot_server_stabilization_time = var.autopilot_server_stabilization_time,
+      autopilot_redundancy_zone_tag       = var.autopilot_redundancy_zone_tag,
+      autopilot_disable_upgrade_migration = var.autopilot_disable_upgrade_migration,
+      autopilot_upgrade_version_tag       = var.autopilot_upgrade_version_tag,
+      enable_gossip_encryption            = var.enable_gossip_encryption,
+      enable_rpc_encryption               = var.enable_rpc_encryption,
+      environment                         = var.environment,
+      recursor                            = var.recursor,
+      bucket                              = aws_s3_bucket.consul_setup.id,
+      bucketkms                           = aws_kms_key.bucketkms.id,
+      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "",
+      enable_acls                         = var.enable_acls,
+      enable_consul_http_encryption       = var.enable_consul_http_encryption,
+      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
+    },
+  )
+}
+
 module "consul" {
   source            = "terraform-aws-modules/autoscaling/aws"
   version           = "3.4.0"
@@ -334,45 +316,7 @@ module "consul" {
       }
     ]
   )
-  user_data = templatefile("${path.module}/install-consul.tpl",
-    {
-      version                             = var.consul_version,
-      download_url                        = var.download_url,
-      path                                = var.path,
-      user                                = var.user,
-      ca_path                             = var.ca_path,
-      cert_file_path                      = var.cert_file_path,
-      key_file_path                       = var.key_file_path,
-      server                              = var.server,
-      client                              = var.client,
-      config_dir                          = var.config_dir,
-      data_dir                            = var.data_dir,
-      systemd_stdout                      = var.systemd_stdout,
-      systemd_stderr                      = var.systemd_stderr,
-      bin_dir                             = var.bin_dir,
-      cluster_tag_key                     = var.cluster_tag_key,
-      cluster_tag_value                   = var.cluster_tag_value,
-      datacenter                          = var.datacenter,
-      autopilot_cleanup_dead_servers      = var.autopilot_cleanup_dead_servers,
-      autopilot_last_contact_threshold    = var.autopilot_last_contact_threshold,
-      autopilot_max_trailing_logs         = var.autopilot_max_trailing_logs,
-      autopilot_server_stabilization_time = var.autopilot_server_stabilization_time,
-      autopilot_redundancy_zone_tag       = var.autopilot_redundancy_zone_tag,
-      autopilot_disable_upgrade_migration = var.autopilot_disable_upgrade_migration,
-      autopilot_upgrade_version_tag       = var.autopilot_upgrade_version_tag,
-      enable_gossip_encryption            = var.enable_gossip_encryption,
-      enable_rpc_encryption               = var.enable_rpc_encryption,
-      environment                         = var.environment,
-      skip_consul_config                  = var.skip_consul_config,
-      recursor                            = var.recursor,
-      bucket                              = aws_s3_bucket.consul_setup.id,
-      bucketkms                           = aws_kms_key.bucketkms.id,
-      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "",
-      enable_acls                         = var.enable_acls,
-      enable_consul_http_encryption       = var.enable_consul_http_encryption,
-      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
-    },
-  )
+  user_data = module.compress.userdata
 }
 
 resource "aws_iam_role_policy_attachment" "SystemsManager" {
