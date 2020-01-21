@@ -454,11 +454,11 @@ function generate_systemd_config {
   local -r config_file="$6"
   local -r data_dir="$7"
   shift 7
-  local -r config_path="$config_dir/$CONFIG_FILE"
+  local -r config_path="$config_dir/$config_file"
   if [[ -z "$data_dir" ]]; then
-    local -r exec_string="$${exec_start} -config-dir $${config_dir} -data-dir $${data_dir}"
-  else
     local -r exec_string="$${exec_start} -config-dir $${config_dir}"
+  else
+    local -r exec_string="$${exec_start} -config-dir $${config_dir} -data-dir $${data_dir}"
   fi
 
   log_info "Creating systemd config file to run Consul in $systemd_config_path"
@@ -478,7 +478,7 @@ EOF
 Type=notify
 User=$user
 Group=$user
-ExecStart=$exec_start
+ExecStart=$exec_string
 ExecReload=$bin_dir/$service reload
 KillMode=process
 Restart=on-failure
@@ -605,9 +605,9 @@ function install_license {
   log_info "Installing Enterprise License"
   aws configure set region $(get_instance_region)
   if [[ -z $consul_http_token ]]; then
-    aws lambda invoke --function-name $consul_license_arn  --payload "{\"consul_server\": \"http://`curl http://169.254.169.254/latest/meta-data/local-ipv4`\", \"token\": \"$${consul_http_token}\"}" /dev/null
-  else
     aws lambda invoke --function-name $consul_license_arn  --payload "{\"consul_server\": \"http://`curl http://169.254.169.254/latest/meta-data/local-ipv4`\"}" /dev/null
+  else
+    aws lambda invoke --function-name $consul_license_arn  --payload "{\"consul_server\": \"http://`curl http://169.254.169.254/latest/meta-data/local-ipv4`\", \"token\": \"$${consul_http_token}\"}" /dev/null
   fi
 }
 
@@ -702,7 +702,7 @@ function main {
     "$user" \
     ${cluster_tag_key} \
     ${cluster_tag_value} \
-    "$datacenter" \
+    "$DATACENTER" \
     ${enable_gossip_encryption} \
     "$gossip_encrypt_key" \
     "$enable_rpc_encryption" \
