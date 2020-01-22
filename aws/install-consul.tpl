@@ -1,8 +1,6 @@
 #!/bin/bash 
 
-set -e
-
-readonly USER=%{ if user != "" }${user}%{else}"consul"%{endif}
+readonly CONSUL_USER=%{ if consul_user != "" }${consul_user}%{else}"consul"%{endif}
 readonly DOWNLOAD_PACKAGE_PATH="/tmp/consul.zip"
 readonly SCRIPT_DIR="$(cd "$(dirname "$${BASH_SOURCE[0]}")" && pwd)"
 readonly SYSTEM_BIN_DIR="/usr/local/bin"
@@ -11,7 +9,7 @@ readonly AWS_ASG_TAG_KEY="aws:autoscaling:groupName"
 readonly CONSUL_CONFIG_FILE="default.json"
 readonly CONSUL_GOSSIP_ENCRYPTION_CONFIG_FILE="gossip-encryption.json"
 readonly CONSUL_RPC_ENCRYPTION_CONFIG_FILE="rpc-encryption.json"
-readonly SYSTEMD_CONFIG_PATH="/etc/systemd/system/consul.service"
+readonly SYSTEMD_CONFIG_PATH="/etc/systemd/system"
 readonly EC2_INSTANCE_METADATA_URL="http://169.254.169.254/latest/meta-data"
 readonly EC2_INSTANCE_DYNAMIC_DATA_URL="http://169.254.169.254/latest/dynamic"
 readonly MAX_RETRIES=30
@@ -312,16 +310,17 @@ function generate_consul_config {
   local -r ca_path="$${10}"
   local -r cert_file_path="$${11}"
   local -r key_file_path="$${12}"
-  local -r cleanup_dead_servers="$${13}"
-  local -r last_contact_threshold="$${14}"
-  local -r max_trailing_logs="$${15}"
-  local -r server_stabilization_time="$${16}"
-  local -r redundancy_zone_tag="$${17}"
-  local -r disable_upgrade_migration="$${18}"
-  local -r upgrade_version_tag=$${19}
+  local -r enable_acls="$${13}"
+  local -r cleanup_dead_servers="$${14}"
+  local -r last_contact_threshold="$${15}"
+  local -r max_trailing_logs="$${16}"
+  local -r server_stabilization_time="$${17}"
+  local -r redundancy_zone_tag="$${18}"
+  local -r disable_upgrade_migration="$${19}"
+  local -r upgrade_version_tag=$${20}
   local -r config_path="$config_dir/$CONSUL_CONFIG_FILE"
 
-  shift 19
+  shift 20
   local -r recursors=("$@")
 
   local instance_id=""
@@ -452,7 +451,8 @@ function generate_systemd_config {
   local -r exec_start="$4"
   local -r config_dir="$5"
   local -r config_file="$6"
-  local -r data_dir="$7"
+  local -r bin_dir="$7"
+  local -r data_dir="$8"
   shift 7
   local -r config_path="$config_dir/$config_file"
   if [[ -z "$data_dir" ]]; then
@@ -461,7 +461,7 @@ function generate_systemd_config {
     local -r exec_string="$${exec_start} -config-dir $${config_dir} -data-dir $${data_dir}"
   fi
 
-  log_info "Creating systemd config file to run Consul in $systemd_config_path"
+  log_info "Creating systemd config file to run Consul in $systemd_config_path/$service.service"
 
   local -r unit_config=$(cat <<EOF
 [Unit]
@@ -492,9 +492,9 @@ WantedBy=multi-user.target
 EOF
 )
 
-  echo -e "$unit_config" > "$systemd_config_path"
-  echo -e "$service_config" >> "$systemd_config_path"
-  echo -e "$install_config" >> "$systemd_config_path"
+  echo -e "$unit_config" > "$systemd_config_path/$service.service"
+  echo -e "$service_config" >> "$systemd_config_path/$service.service"
+  echo -e "$install_config" >> "$systemd_config_path/$service.service"
 }
 
 function start_consul {
@@ -563,6 +563,7 @@ function create_ca {
 function enable_acls {
   local -r bucket="$1"
   local -r bucketkms="$2"
+  local -r path="$3"
 
   log_info "Bootstrapping ACLs"
   curl localhost:8500/v1/status/leader | grep `curl http://169.254.169.254/latest/meta-data/local-ipv4`
@@ -581,16 +582,16 @@ function enable_acls {
   ec=$?
   case $ec in
     0) log_info "Consul ACLs already bootstrapped"
-       CONSUL_HTTP_TOKEN=`aws s3 cp s3://${bucket}/consul-http-token - --sse aws:kms --sse-kms-key-id=${bucketkms}`
-       sed -i "/\"acl\":/a \"tokens\": { \"agent\":  \"$CONSUL_HTTP_TOKEN\" }," /opt/consul/config/default.json
+       consul_http_token=`aws s3 cp s3://${bucket}/consul-http-token - --sse aws:kms --sse-kms-key-id=${bucketkms}`
+       sed -i "/\"acl\":/a \"tokens\": { \"agent\":  \"$consul_http_token\" }," /opt/consul/config/default.json
        service consul restart
     ;;
     1) log_info "Bootstrapping ACLs"
-       CONSUL_HTTP_TOKEN=`$path/bin/consul acl bootstrap | grep SecretID | sed 's/\(SecretID:\)[ ]*\([a-z1-9-]*\)/\2/'`
-       echo $CONSUL_HTTP_TOKEN > consul-http-token
+       consul_http_token=`$path/bin/consul acl bootstrap | grep SecretID | sed 's/\(SecretID:\)[ ]*\([a-z1-9-]*\)/\2/'`
+       echo $consul_http_token > consul-http-token
        aws s3 cp consul-http-token s3://${bucket}/consul-http-token --sse aws:kms --sse-kms-key-id=${bucketkms}
        rm consul-http-token
-       sed -i "/\"acl\":/a \"tokens\": { \"agent\":  \"$CONSUL_HTTP_TOKEN\" }," /opt/consul/config/default.json
+       sed -i "/\"acl\":/a \"tokens\": { \"agent\":  \"$consul_http_token\" }," /opt/consul/config/default.json
        service consul restart
     ;;
     *) log_error "Error, aws s3 ls for consul-http-token did not return 0 or 1, but instead $ec"
@@ -613,7 +614,9 @@ function install_license {
 
 function configure_backups {
   local -r consul_backup_bucket="$1"
-  local -r consul_http_token="$2"
+  local -r user="$2"
+  local -r path="$3"
+  local -r consul_http_token="$4"
 
   log_info "Configure Consul Backup"
   consul_backup_config=$(cat <<EOF
@@ -650,20 +653,21 @@ EOF
   generate_systemd_config "consulbackup" \
     "$SYSTEMD_CONFIG_PATH" \
     "$user" \
-    "$path/bin/consul snapshot agent"
+    "$path/bin/consul snapshot agent" \
     "$path/config" \
-    "backup.json"
+    "backup.json" \
+    "$path/bin"
   service consulbackup restart
 }
 
 function main {
   log_info "Starting Consul install"
   install_dependencies
-  create_consul_user "$USER"
-  create_consul_install_paths "$CONSUL_PATH" "$USER"
+  create_consul_user "$CONSUL_USER"
+  create_consul_install_paths "$CONSUL_PATH" "$CONSUL_USER"
 
   fetch_binary "$CONSUL_VERSION" "$CONSUL_DOWNLOAD_URL"
-  install_binary "$CONSUL_PATH" "$USER"
+  install_binary "$CONSUL_PATH" "$CONSUL_USER"
 
   if command -v consul; then
     log_info "Consul install complete!";
@@ -709,6 +713,7 @@ function main {
     "$ca_path" \
     "$cert_file_path" \
     "$key_file_path" \
+    ${enable_acls} \
     "$AUTOPILOT_CLEANUP_DEAD_SERVERS" \
     "$AUTOPILOT_LAST_CONTACT_THRESHOLD" \
     "$AUTOPILOT_MAX_TRAILING_LOGS" \
@@ -724,6 +729,7 @@ function main {
     "$CONSUL_PATH/bin/consul agent" \
     "$CONSUL_PATH/config" \
     "default.json" \
+    "$CONSUL_PATH/bin" \
     "$CONSUL_PATH/data"
   start_consul
 
@@ -731,12 +737,12 @@ function main {
   retry "curl localhost:8500/v1/status/leader | grep :" "Waiting for cluster leader" 100
 
   %{ if enable_acls }
-  enable_acls ${bucket} ${bucketkms}
+  enable_acls ${bucket} ${bucketkms} $CONSUL_PATH
   %{ endif }
 
   %{ if consul_license_arn != "" }
   install_license ${consul_license_arn} $consul_http_token
-  configure_backups ${consul_backup_bucket} $consul_http_token 
+  configure_backups ${consul_backup_bucket} $CONSUL_USER $CONSUL_PATH $consul_http_token
   %{ endif }
 
 }

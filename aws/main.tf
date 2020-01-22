@@ -129,24 +129,18 @@ data "aws_iam_policy_document" "consul_backups" {
   statement {
     effect = "Allow"
     actions = [
-      "s3:GetObject",
       "s3:PutObject",
-      "s3:ListBucket",
-      "s3:ListBucketVersions"
+      "s3:DeleteObject"
     ]
-    resources = [
-      "${aws_s3_bucket.consul_backups[0].arn}/*"
-    ]
+    resources = ["${aws_s3_bucket.consul_backups[0].arn}/*"]
   }
-
   statement {
     effect = "Allow"
     actions = [
+      "s3:ListBucketVersions",
       "s3:ListBucket"
     ]
-    resources = [
-      aws_s3_bucket.consul_backups[0].arn
-    ]
+    resources = [aws_s3_bucket.consul_backups[0].arn]
   }
 }
 
@@ -238,7 +232,7 @@ data "aws_iam_policy_document" "auto_discover_cluster" {
   }
 }
 
-module "compress" {
+module "compress_consul" {
   source   = "github.com/chrismatteson/terraform-compress-userdata"
   filename = "userdata.sh"
   shell    = "bash"
@@ -247,7 +241,7 @@ module "compress" {
       consul_version                      = var.consul_version,
       consul_download_url                 = var.consul_download_url,
       path                                = var.path,
-      user                                = var.user,
+      consul_user                         = var.consul_user,
       ca_path                             = var.ca_path,
       cert_file_path                      = var.cert_file_path,
       key_file_path                       = var.key_file_path,
@@ -316,7 +310,7 @@ module "consul" {
       }
     ]
   )
-  user_data = module.compress.userdata
+  user_data = module.compress_consul.userdata
 }
 
 resource "aws_iam_role_policy_attachment" "SystemsManager" {
@@ -339,6 +333,45 @@ resource "aws_iam_role_policy" "InvokeLambda" {
 }
 
 # Install Vault
+module "compress_vault" {
+  source   = "github.com/chrismatteson/terraform-compress-userdata"
+  filename = "userdata.sh"
+  shell    = "bash"
+  content = templatefile("${path.module}/install-vault.tpl",
+    {
+      consul_version                      = var.consul_version,
+      consul_download_url                 = var.consul_download_url,
+      vault_version                       = var.vault_version,
+      vault_download_url                  = var.vault_download_url,
+      path                                = var.path,
+      consul_user                         = var.consul_user,
+      vault_user                          = var.vault_user,
+      ca_path                             = var.ca_path,
+      cert_file_path                      = var.cert_file_path,
+      key_file_path                       = var.key_file_path,
+      server                              = var.server,
+      client                              = var.client,
+      config_dir                          = var.config_dir,
+      data_dir                            = var.data_dir,
+      systemd_stdout                      = var.systemd_stdout,
+      systemd_stderr                      = var.systemd_stderr,
+      bin_dir                             = var.bin_dir,
+      cluster_tag_key                     = var.cluster_tag_key,
+      cluster_tag_value                   = var.cluster_tag_value,
+      datacenter                          = var.datacenter,
+      enable_gossip_encryption            = var.enable_gossip_encryption,
+      enable_rpc_encryption               = var.enable_rpc_encryption,
+      environment                         = var.environment,
+      recursor                            = var.recursor,
+      bucket                              = aws_s3_bucket.consul_setup.id,
+      bucketkms                           = aws_kms_key.bucketkms.id,
+      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "",
+      enable_acls                         = var.enable_acls,
+      enable_consul_http_encryption       = var.enable_consul_http_encryption,
+      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
+    },
+  )
+}
 module "vault" {
   source            = "terraform-aws-modules/autoscaling/aws"
   version           = "3.4.0"
@@ -364,14 +397,5 @@ module "vault" {
       propagate_at_launch : true
     }
   ]
-  user_data = templatefile("${path.module}/install-vault.tpl",
-    {
-      consul_version    = "1.6.1+ent",
-      consul_binary     = "",
-      cluster_tag_key   = var.cluster_tag_key,
-      cluster_tag_value = var.cluster_tag_value,
-      vault_version     = "1.3.1+ent",
-      vault_binary      = "",
-    },
-  )
+  user_data = module.compress_vault.userdata
 }

@@ -1,463 +1,695 @@
-#!/bin/bash
+#!/bin/bash 
 
-# operating systems tested on:
-#
-# 1. Ubuntu 18.04
-# https://aws.amazon.com/marketplace/pp/B07CQ33QKV
-# 1. Centos 7
-# https://aws.amazon.com/marketplace/pp/B00O7WM7QW
-
-readonly DEFAULT_PROVIDER="aws"
-readonly DEFAULT_VAULT_INSTALL_PATH="/usr/local/bin/vault"
-readonly DEFAULT_VAULT_USER="vault"
-readonly DEFAULT_VAULT_PATH="/etc/vault.d"
-readonly DEFAULT_VAULT_CONFIG="vault.hcl"
-readonly DEFAULT_VAULT_SERVICE="/etc/systemd/system/vault.service"
-readonly DEFAULT_VAULT_CERTS="/etc/vault.d/certs"
-readonly DEFAULT_VAULT_OPT="/opt/vault"
-
-
-readonly DEFAULT_CONSUL_INSTALL_PATH="/usr/local/bin/consul"
-readonly DEFAULT_CONSUL_USER="consul-storage"
-readonly DEFAULT_CONSUL_PATH="/etc/consul-storage.d"
-readonly DEFAULT_CONSUL_OPT="/opt/consul-storage"
-readonly DEFAULT_CONSUL_CONFIG="consul.hcl"
-readonly DEFAULT_CONSUL_SERVICE="/etc/systemd/system/consul-storage.service"
-readonly DEFAULT_CONSUL_SERVICE_NAME="consul-storage"
-readonly CONSUL_DC="vault-storage"
-
+readonly CONSUL_USER=%{ if consul_user != "" }${consul_user}%{else}"consul"%{endif}
+readonly VAULT_USER=%{ if vault_user != "" }${vault_user}%{else}"vault"%{endif}
+readonly DOWNLOAD_PACKAGE_DIR="/tmp"
 readonly SCRIPT_DIR="$(cd "$(dirname "$${BASH_SOURCE[0]}")" && pwd)"
-readonly TMP_DIR="/tmp/install"
+readonly SYSTEM_BIN_DIR="/usr/local/bin"
 readonly SCRIPT_NAME="$(basename "$0")"
-
-# Variables interpolated via terraform template resource.
-readonly CONSUL_VERSION=${consul_version}
-readonly CONSUL_BINARY=${consul_binary}
-readonly CLUSTER_TAG_KEY=${cluster_tag_key}
-readonly CLUSTER_TAG_VALUE=${cluster_tag_value}
-
-readonly VAULT_VERSION=${vault_version}
-readonly VAULT_BINARY=${vault_binary}
-
-# Set up the configs so they can be easily interpolated into the functions
-######################################################
-# Consul 1.3 or lower
-######################################################
-read -r -d '' CONSUL_CONFIG_13 << EOF
-datacenter        = "$${CONSUL_DC}"
-data_dir          = "$${DEFAULT_CONSUL_OPT}"
-retry_join        = ["provider=$${DEFAULT_PROVIDER}  tag_key=$${CLUSTER_TAG_KEY}  tag_value=$${CLUSTER_TAG_VALUE}"]
-performance {
-  raft_multiplier = 1
-}
-
-addresses {
-  http  = "0.0.0.0"
-  https = "0.0.0.0"
-  dns   = "0.0.0.0"
-}
-
-ports {
-  dns             = 7600
-  http            = 7500
-  https           = 7501
-  serf_lan        = 7301
-  serf_wan        = 7302
-  server          = 7300
-}
-
-##encrypt                 = "{{ gossip-key }}"
-#ca_file           = "$${DEFAULT_CONSUL_PATH}/ca_cert.pem"
-#cert_file         = "$${DEFAULT_CONSUL_PATH}/server_cert.pem"
-#key_file          = "$${DEFAULT_CONSUL_PATH}/server_key.pem"
-#verify_outgoing   = true
-#verify_server_hostname  = true
-#acl_datacenter =  "$${CONSUL_DC}"
-#acl_default_policy =  "deny"
-#acl_down_policy =  "extend-cache"
-##acl_agent_token = {{ acl_token }}
-EOF
-######################################################
-# Consul 1.4 or higher
-######################################################
-read -r -d '' CONSUL_CONFIG_14 << EOF
-datacenter              = "$${CONSUL_DC}"
-data_dir                = "$${DEFAULT_CONSUL_OPT}"
-enable_script_checks    = false
-disable_remote_exec     = true
-retry_join              = ["provider=$${DEFAULT_PROVIDER}  tag_key=$${CLUSTER_TAG_KEY  tag_value=$${CLUSTER_TAG_VALUE}"]
-performance {
-  raft_multiplier = 1
-}
-
-addresses {
-  http  = "0.0.0.0"
-  https = "0.0.0.0"
-  dns   = "0.0.0.0"
-}
-
-ports {
-  dns         = 7600
-  http        = 7500
-  https       = 7501
-  serf_lan    = 7301
-  serf_wan    = 7302
-  server      = 7300
-}
-##encrypt                 = "{{ gossip-key }}"
-#verify_incoming_rpc     = true
-#verify_outgoing         = true
-#verify_server_hostname  = true
-#ca_file                 = "$${DEFAULT_CONSUL_PATH}/ca_cert.pem"
-#cert_file               = "$${DEFAULT_CONSUL_PATH}/server_cert.pem"
-#key_file                = "$${DEFAULT_CONSUL_PATH}/server_key.pem"
-#acl {
-#  enabled                   = true,
-#  default_policy            = "deny",
-#  enable_token_persistence  = true
-#}
-EOF
-######################################################
-# Vault Config
-######################################################
-read -r -d '' VAULT_CONFIG << EOF
-listener "tcp" {
-  tls_cert_file            = "$${DEFAULT_VAULT_PATH}/tls.crt"
-  tls_key_file             = "$${DEFAULT_VAULT_PATH}/tls.key"
-  address                  = "0.0.0.0:8200"
-  tls_disable              = "false"
-  tls_disable_client_certs = "true"
-}
-storage "consul" {
-  address         = "127.0.0.1:7501"
-  token           = {{ vault-token }}
-  path            = "vault/"
-  scheme          = "https"
-  tls_ca_file     = "$${DEFAULT_VAULT_PATH}/ca_cert.pem"
-  tls_cert_file   = "$${DEFAULT_VAULT_PATH}/server_cert.pem"
-  tls_key_file    = "$${DEFAULT_VAULT_PATH}/server_key.pem"
-  tls_skip_verify = "true"
-}
-ui       = true
-EOF
-######################################################
+readonly AWS_ASG_TAG_KEY="aws:autoscaling:groupName"
+readonly CONSUL_CONFIG_FILE="default.json"
+readonly CONSUL_GOSSIP_ENCRYPTION_CONFIG_FILE="gossip-encryption.json"
+readonly CONSUL_RPC_ENCRYPTION_CONFIG_FILE="rpc-encryption.json"
+readonly SYSTEMD_CONFIG_PATH="/etc/systemd/system"
+readonly EC2_INSTANCE_METADATA_URL="http://169.254.169.254/latest/meta-data"
+readonly EC2_INSTANCE_DYNAMIC_DATA_URL="http://169.254.169.254/latest/dynamic"
+readonly MAX_RETRIES=30
+readonly SLEEP_BETWEEN_RETRIES_SEC=10
+readonly CONSUL_PATH=%{ if path != "" }${path}%{else}"/opt/consul"%{endif}
+readonly CA_PATH=%{ if ca_path != "" }${ca_path}%{else}"$CONSUL_PATH/tls/ca/ca.pem"%{endif}
+readonly CA_PRIVATE_KEY_PATH=$CONSUL_PATH/tls/ca/ca_private_key.pem
+readonly CERT_FILE_PATH=%{ if cert_file_path != "" }${cert_file_path}%{else}"$CONSUL_PATH/tls/server.pem"%{endif}
+readonly KEY_FILE_PATH=%{ if key_file_path != "" }${key_file_path}%{else}"$CONSUL_PATH/tls/key.pem"%{endif}
+readonly DATACENTER=%{ if datacenter != "" }${datacenter}%{ else }dc1%{ endif }
+readonly CONSUL_VERSION=%{ if consul_version != "" }${consul_version}%{ endif }
+readonly CONSUL_DOWNLOAD_URL=%{ if consul_download_url != "" }${consul_download_url}%{ endif }
+readonly VAULT_VERSION=%{ if vault_version != "" }${vault_version}%{ endif }
+readonly VAULT_DOWNLOAD_URL=%{ if vault_download_url != "" }${vault_download_url}%{ endif }
 
 function log {
   local -r level="$1"
-  local -r func="$2"
-  local -r message="$3"
+  local -r message="$2"
   local -r timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-  >&2 echo -e "$${timestamp} [$${level}] [$${SCRIPT_NAME}:$${func}] $${message}"
+  >&2 echo -e "$${timestamp} [$${level}] [$SCRIPT_NAME] $${message}"
+}
+
+function log_info {
+  local -r message="$1"
+  log "INFO" "$message"
+}
+
+function log_warn {
+  local -r message="$1"
+  log "WARN" "$message"
+}
+
+function log_error {
+  local -r message="$1"
+  log "ERROR" "$message"
+}
+
+function strip_prefix {
+  local -r str="$1"
+  local -r prefix="$2"
+  echo "$${str#$prefix}"
 }
 
 function assert_not_empty {
-  local func="assert_not_empty"
   local -r arg_name="$1"
   local -r arg_value="$2"
 
-  if [[ -z "$${arg_value}" ]]; then
-    log "ERROR" $${func} "The value for '$${arg_name}' cannot be empty"
+  if [[ -z "$arg_value" ]]; then
+    log_error "The value for '$arg_name' cannot be empty"
+    print_usage
     exit 1
   fi
 }
 
+function assert_either_or {
+  local -r arg1_name="$1"
+  local -r arg1_value="$2"
+  local -r arg2_name="$3"
+  local -r arg2_value="$4"
+
+  if [[ -z "$arg1_value" && -z "$arg2_value" ]]; then
+    log_error "Either the value for '$arg1_name' or '$arg2_name' must be passed, both cannot be empty"
+    print_usage
+    exit 1
+  fi
+}
+
+# A retry function that attempts to run a command a number of times and returns the output
+function retry {
+  local -r cmd="$1"
+  local -r description="$2"
+  local -r max_tries="$3"
+
+  for i in $(seq 1 $max_tries); do
+    log_info "$description"
+
+    # The boolean operations with the exit status are there to temporarily circumvent the "set -e" at the
+    # beginning of this script which exits the script immediatelly for error status while not losing the exit status code
+    output=$(eval "$cmd") && exit_status=0 || exit_status=$?
+    log_info "$output"
+    if [[ $exit_status -eq 0 ]]; then
+      echo "$output"
+      return
+    fi
+    log_warn "$description failed. Will sleep for 10 seconds and try again."
+    sleep 10
+  done;
+
+  log_error "$description failed after $max_tries attempts."
+  exit $exit_status
+}
+
 function has_yum {
-  [[ -n "$(command -v yum)" ]]
+  [ -n "$(command -v yum)" ]
 }
 
 function has_apt_get {
-  [[ -n "$(command -v apt-get)" ]]
+  [ -n "$(command -v apt-get)" ]
 }
 
 function install_dependencies {
-  local func="install_dependencies"
-  log "INFO" $${func} "Installing dependencies"
+  log_info "Installing dependencies"
 
-  if has_apt_get; then
-    sudo add-apt-repository multiverse
-    sudo add-apt-repository universe
+  if $(has_apt_get); then
     sudo apt-get update -y
-    sudo apt-get install -y jq
-    sudo apt-get install -y curl
-    sudo apt-get install -y unzip
-    sudo apt-get install -y awscli
-    # sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
-  elif has_yum; then
-    # sudo yum update -y
-    sudo yum install -y unzip jq curl
-    sudo yum install -y epel-release
-    sudo yum install -y python-pip
-    sudo pip install awscli
-    sudo yum install -y perl-Digest-SHA
+    sudo apt-get install -y awscli curl unzip jq
+  elif $(has_yum); then
+    sudo yum update -y
+    sudo yum install -y aws curl unzip jq
   else
-    log "ERROR" $${func} "Could not find apt-get or yum. Cannot install dependencies on this OS."
+    log_error "Could not find apt-get or yum. Cannot install dependencies on this OS."
     exit 1
   fi
 }
 
 function user_exists {
   local -r username="$1"
-  id "$${username}" >/dev/null 2>&1
+  id "$username" >/dev/null 2>&1
 }
 
-function create_user {
-  local func="create_user"
+function create_consul_user {
   local -r username="$1"
-  log "INFO" $${func} "User $${username} Creating"
-  if $(user_exists "$${username}"); then
-    log "INFO" $${func} "User $${username} already exists. Will not create again."
+
+  if $(user_exists "$username"); then
+    echo "User $username already exists. Will not create again."
   else
-    if [ $${username} = "vault" ]; then
-      log "INFO" $${func} "Creating user named $${username}"
-      sudo useradd --system --home $${DEFAULT_VAULT_PATH} --shell /bin/false $${username}
-    fi
-    if [ $${username} = "consul-storage" ]; then
-      log "INFO" $${func} "Creating user named $${username}"
-      sudo useradd --system --home $${DEFAULT_CONSUL_PATH} --shell /bin/false $${username}
-    fi
+    log_info "Creating user named $username"
+    sudo useradd "$username"
   fi
 }
 
-function get_consul_version {
-  local func="get_consul_version"
-  log "INFO" $${func} "finding version of downloaded consul"
-  c_v=$($${DEFAULT_CONSUL_INSTALL_PATH} -v | head -1 |cut -d' ' -f2|sed 's/^v//'|cut -d'.' -f1,2)
-  my_v=$(echo "$${c_v} < 1.4" | bc)
-  echo $${my_v}
-  log "INFO" $${func} "CV = $${c_v}, V = $${my_v}"
-}
-
-function create_install_paths {
-  local func="create_install_paths"
+function create_consul_install_paths {
   local -r path="$1"
   local -r username="$2"
-  local -r config="$3"
-  local -r opt="$4"
-  local -r tag_val="$5"
-  local -r software="$6"
-  local -r consul_ver="$7"
 
-  log "INFO" $${func} "path = $${path} username=$${username} config = $${config} opt = $${opt}  tag_val = $${tag_val}"
+  log_info "Creating install dirs for Consul at $path"
+  sudo mkdir -p "$path"
+  sudo mkdir -p "$path/bin"
+  sudo mkdir -p "$path/config"
+  sudo mkdir -p "$path/data"
+  sudo mkdir -p "$path/tls/ca"
 
-  log "INFO" $${func} "Creating install dirs for $${software} at $${path}"
-  if [[ ! -d "$${path}" ]]; then
-    sudo mkdir -p "$${path}"
-  fi
-  sudo chmod 750 "$${path}"
-  sudo chown "$${username}":"$${username}" "$${path}"
-  sudo mkdir -p "$${opt}"
-  sudo chmod 750 "$${opt}"
-  sudo chown "$${username}":"$${username}" "$${opt}"
-
-  if [ "$${software}" == "consul" ]; then
-    if [ $${consul_ver} -eq 0 ]; then
-      # Consul version 1.4 or greater
-      echo "$${CONSUL_CONFIG_14}" > $${TMP_DIR}/outy
-    else
-      # Consul version 1.3 or less
-      echo "$${CONSUL_CONFIG_13}" > $${TMP_DIR}/outy
-    fi
-  elif [ "$${software}" == "vault" ]; then
-    echo "$${VAULT_CONFIG}" > $${TMP_DIR}/outy
-  else
-    log "ERROR" $${func} "software type unknown -- $${software}"
-  fi
-
-  sudo cp $${TMP_DIR}/outy $${path}/$${config}
-  sudo chown "$${username}":"$${username}" $${path}/$${config}
-  sudo chmod 640 $${path}/$${config}
+  log_info "Changing ownership of $path to $username"
+  sudo chown -R "$username:$username" "$path"
 }
 
-function get_binary {
-  # if there is no version then we are going to get binary from S3
-  # else we download from Consul site. This is set by type variable of 1 or 0
-  # if type == 1 then we get bin from S3
-  # else we get bin from download
-  # The instance needs access to the S3 bucket either as a public bucket or better
-  # as a private bucket with IAM role permissions
+function fetch_binary {
+  local -r product="$1"
+  local -r version="$2"
+  local download_url="$3"
 
-  local func="get_binary"
-  local -r bin="$1"
-  local -r type="$2"
-  local -r software="$3"
-  local -r zip="$4"
-  # get from download
-  if [[ $${type} != 1 ]]; then
-    ver="$${bin}"
-    assert_not_empty "--version" $${ver}
-    log "INFO" $${func} "Copying $${software} version $${ver} binary to local"
-    cd $${TMP_DIR}
-    curl -O https://releases.hashicorp.com/$${software}/$${ver}/$${software}_$${ver}_linux_amd64.zip
-    curl -Os https://releases.hashicorp.com/$${software}/$${ver}/$${software}_$${ver}_SHA256SUMS
-    curl -Os https://releases.hashicorp.com/$${software}/$${ver}/$${software}_$${ver}_SHA256SUMS.sig
-    sha256sum -c $${software}_$${ver}_SHA256SUMS 2> /dev/null | grep $${software}_$${ver}_linux_amd64.zip | grep OK
-    ex_c=$?
-    if [[ $${ex_c} -ne 0 ]]; then
-      log "ERROR" $${func} "The download of the $${software} binary failed"
-      exit
-    else
-      log "INFO" $${func} "The download of $${software} binary successful"
-    fi
-    unzip -tqq $${TMP_DIR}/$${zip}
-    if [[ $? -ne 0 ]]; then
-      log "ERROR" $${func} "Supplied $${software} binary is not a zip file"
-      exit
-    fi
-  else
-    log "INFO" $${func} "Copying Vault binary from $${bin} to local"
-    aws s3 cp "$${bin}" "$${TMP_DIR}/$${zip}"
-    ex_c=$?
-    log "INFO" $${func} "curl copy exit code == $${ex_c}"
-    if [[ $${ex_c} -ne 0 ]]; then
-      log "ERROR" $${func} "The copy of the $${software} binary from $${bin} failed"
-      exit
-    else
-      log "INFO" $${func} "Copy of $${software} binary successful"
-    fi
-    unzip -tqq $${TMP_DIR}/$${zip}
-    if [[ $? -ne 0 ]]; then
-      log "ERROR" $${func} "Supplied $${software} binary is not a zip file"
-      exit
-    fi
+  if [[ -z "$download_url" && -n "$version" ]];  then
+    download_url="https://releases.hashicorp.com/$${product}/$${version}/$${product}_$${version}_linux_amd64.zip"
   fi
+
+  retry \
+    "curl -o '$${DOWNLOAD_PACKAGE_DIR/$${product}.zip' '$download_url' --location --silent --fail --show-error" \
+    "Downloading $${product} to $DOWNLOAD_PACKAGE_DIR" \
+    5
 }
 
 function install_binary {
-  local func="install_binary"
-  local -r loc="$1"
-  local -r tmp="$2"
-  local -r zip="$3"
-  local -r software="$4"
-  log "INFO" $${func} "LOC = $${loc}, TMP = $${tmp}, ZIP = $${zip} SOFTWARE = $${software}"
+  local -r product="$1"
+  local -r install_path="$2"
+  local -r username="$3"
 
-  if [ $${software} == "consul" ]; then
-    local -r user="$${DEFAULT_CONSUL_USER}"
-  fi
-  if [ $${software} == "vault" ]; then
-    local -r user="$${DEFAULT_VAULT_USER}"
-  fi
+  local -r bin_dir="$install_path/bin"
+  local -r dest_path="$bin_dir/$product"
 
-  log "INFO" $${func} "Installing $${software}"
-  cd $${tmp} && unzip -q $${zip}
-  sudo chmod 750 "$${software}"
-  sudo chown "$${user}":root "$${software}"
-  sudo mv "$${software}" $${loc}
-  if [ $${software} == "vault" ]; then
-    sudo setcap cap_ipc_lock=+ep "$${loc}"
+  unzip -d /tmp "$DOWNLOAD_PACKAGE_DIR/$product.zip"
+
+  log_info "Moving $product binary to $dest_path"
+  sudo mv "/tmp/$product" "$dest_path"
+  sudo chown "$username:$username" "$dest_path"
+  sudo chmod a+x "$dest_path"
+
+  local -r symlink_path="$SYSTEM_BIN_DIR/$product"
+  if [[ -f "$symlink_path" ]]; then
+    log_info "Symlink $symlink_path already exists. Will not add again."
+  else
+    log_info "Adding symlink to $consul_dest_path in $symlink_path"
+    sudo ln -s "$dest_path" "$symlink_path"
   fi
 }
 
+function lookup_path_in_instance_metadata {
+  local -r path="$1"
+  curl --silent --show-error --location "$EC2_INSTANCE_METADATA_URL/$path/"
+}
 
-function create_service {
-  local func="create_service"
+function lookup_path_in_instance_dynamic_data {
+  local -r path="$1"
+  curl --silent --show-error --location "$EC2_INSTANCE_DYNAMIC_DATA_URL/$path/"
+}
+
+function get_instance_ip_address {
+  lookup_path_in_instance_metadata "local-ipv4"
+}
+
+function get_instance_id {
+  lookup_path_in_instance_metadata "instance-id"
+}
+
+function get_instance_region {
+  lookup_path_in_instance_dynamic_data "instance-identity/document" | jq -r ".region"
+}
+
+function get_instance_tags {
+  local -r instance_id="$1"
+  local -r instance_region="$2"
+  local tags=""
+  local count_tags=""
+
+  log_info "Looking up tags for Instance $instance_id in $instance_region"
+  for (( i=1; i<="$MAX_RETRIES"; i++ )); do
+    tags=$(aws ec2 describe-tags \
+      --region "$instance_region" \
+      --filters "Name=resource-type,Values=instance" "Name=resource-id,Values=$${instance_id}")
+    count_tags=$(echo $tags | jq -r ".Tags? | length")
+    if [[ "$count_tags" -gt 0 ]]; then
+      log_info "This Instance $instance_id in $instance_region has Tags."
+      echo "$tags"
+      return
+    else
+      log_warn "This Instance $instance_id in $instance_region does not have any Tags."
+      log_warn "Will sleep for $SLEEP_BETWEEN_RETRIES_SEC seconds and try again."
+      sleep "$SLEEP_BETWEEN_RETRIES_SEC"
+    fi
+  done
+
+  log_error "Could not find Instance Tags for $instance_id in $instance_region after $MAX_RETRIES retries."
+  exit 1
+}
+
+# Get the value for a specific tag from the tags JSON returned by the AWS describe-tags:
+# https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-tags.html
+function get_tag_value {
+  local -r tags="$1"
+  local -r tag_key="$2"
+
+  echo "$tags" | jq -r ".Tags[] | select(.Key == \"$tag_key\") | .Value"
+}
+
+function assert_is_installed {
+  local -r name="$1"
+
+  if [[ ! $(command -v $${name}) ]]; then
+    log_error "The binary '$name' is required by this script but is not installed or in the system's PATH."
+    exit 1
+  fi
+}
+
+function split_by_lines {
+  local prefix="$1"
+  shift
+
+  for var in "$@"; do
+    echo "$${prefix}$${var}"
+  done
+}
+
+function generate_consul_config {
+  local -r server="$${1}"
+  local -r config_dir="$${2}"
+  local -r user="$${3}"
+  local -r cluster_tag_key="$${4}"
+  local -r cluster_tag_value="$${5}"
+  local -r datacenter="$${6}"
+  local -r enable_gossip_encryption="$${7}"
+  local -r gossip_encryption_key="$${8}"
+  local -r config_path="$config_dir/$CONSUL_CONFIG_FILE"
+
+  shift 20
+  local -r recursors=("$@")
+
+  local instance_id=""
+  local instance_ip_address=""
+  local instance_region=""
+  local ui="false"
+
+  instance_id=$(get_instance_id)
+  instance_ip_address=$(get_instance_ip_address)
+  instance_region=$(get_instance_region)
+
+  local retry_join_json=""
+  if [[ -z "$cluster_tag_key" || -z "$cluster_tag_value" ]]; then
+    log_warn "Either the cluster tag key ($cluster_tag_key) or value ($cluster_tag_value) is empty. Will not automatically try to form a cluster based on EC2 tags."
+  else
+    retry_join_json=$(cat <<EOF
+"retry_join": ["provider=aws region=$instance_region tag_key=$cluster_tag_key tag_value=$cluster_tag_value"],
+EOF
+)
+  fi
+
+  local recursors_config=""
+  if (( $${#recursors[@]} != 0 )); then
+        recursors_config="\"recursors\" : [ "
+        for recursor in $${recursors[@]}
+        do
+            recursors_config="$${recursors_config}\"$${recursor}\", "
+        done
+        recursors_config=$(echo "$${recursors_config}"| sed 's/, $//')" ],"
+  fi
+
+  local gossip_encryption_configuration=""
+  if [[ "$enable_gossip_encryption" == "true" && ! -z "$gossip_encryption_key" ]]; then
+    log_info "Creating gossip encryption configuration"
+    gossip_encryption_configuration="\"encrypt\": \"$gossip_encryption_key\","
+  fi
+
+  local acl_configuration=""
+  if [ "$enable_acls" == "true" ]; then
+    log_info "Creating ACL configuration"
+    acl_configuration=$(cat <<EOF
+"acl": {
+  "enabled": true,
+  "default_policy": "deny",
+  "enable_token_persistence": true
+},
+EOF
+)
+  fi
+
+  local node_meta_configuration=""
+  if [ "$node_meta" != "" ]; then
+    log_info "Creating node-meta configuration"
+    node_meta_configuration=$(cat <<EOF
+"node_meta": $${node_meta},
+EOF
+)
+  fi
+
+  log_info "Creating default Consul configuration"
+  local default_config_json=$(cat <<EOF
+{
+  "advertise_addr": "$instance_ip_address",
+  "bind_addr": "$instance_ip_address",
+  $bootstrap_expect
+  "client_addr": "0.0.0.0",
+  "datacenter": "$datacenter",
+  "node_name": "$instance_id",
+  $recursors_config
+  $retry_join_json
+  "server": $server,
+  $gossip_encryption_configuration
+  $rpc_encryption_configuration
+  $autopilot_configuration
+  $acl_configuration
+  $node_meta_configuration
+  "ui": $ui
+}
+EOF
+)
+  log_info "Installing Consul config file in $config_path"
+  echo "$default_config_json" | jq '.' > "$config_path"
+  chown "$user:$user" "$config_path"
+}
+
+function generate_vault_config {
+  local -r config_dir="$1"
+  local -r user="$2"
+  local -r consul_http_token="$3"
+  local -r config_path="$config_dir/$CONSUL_CONFIG_FILE"
+
+  local instance_id=""
+  local instance_ip_address=""
+
+  instance_id=$(get_instance_id)
+  instance_ip_address=$(get_instance_ip_address)
+  instance_region=$(get_instance_region)
+
+  local retry_join_json=""
+  if [[ -z "$cluster_tag_key" || -z "$cluster_tag_value" ]]; then
+    log_warn "Either the cluster tag key ($cluster_tag_key) or value ($cluster_tag_value) is empty. Will not automatically try to form a cluster based on EC2 tags."
+  else
+    retry_join_json=$(cat <<EOF
+"retry_join": ["provider=aws region=$instance_region tag_key=$cluster_tag_key tag_value=$cluster_tag_value"],
+EOF
+)
+  fi
+
+
+  local gossip_encryption_configuration=""
+  if [[ "$enable_gossip_encryption" == "true" && ! -z "$gossip_encryption_key" ]]; then
+    log_info "Creating gossip encryption configuration"
+    gossip_encryption_configuration="\"encrypt\": \"$gossip_encryption_key\","
+  fi
+
+  local acl_configuration=""
+  if [ "$enable_acls" == "true" ]; then
+    log_info "Creating ACL configuration"
+    acl_configuration=$(cat <<EOF
+"acl": {
+  "enabled": true,
+  "default_policy": "deny",
+  "enable_token_persistence": true
+},
+EOF
+)
+  fi
+
+  log_info "Creating default Vault configuration"
+  local default_vault_json=$(cat <<EOF
+{
+listener "tcp" {
+  tls_cert_file            = "$${VAULT_PATH}/tls.crt"
+  tls_key_file             = "$${VAULT_PATH}/tls.key"
+  address                  = "0.0.0.0:8200"
+  tls_disable              = "false"
+  tls_disable_client_certs = "true"
+}
+storage "consul" {
+  address         = "127.0.0.1:7501"
+  token           = $${consul_http_token}
+  path            = "vault/"
+  scheme          = "https"
+  tls_ca_file     = "$${VAULT_PATH}/ca_cert.pem"
+  tls_cert_file   = "$${VAULT_PATH}/server_cert.pem"
+  tls_key_file    = "$${VAULT_PATH}/server_key.pem"
+  tls_skip_verify = "true"
+}
+ui       = true  
+}
+EOF
+)
+  log_info "Installing Vault config file in $config_path"
+  echo "$default_config_json" | jq '.' > "$config_path"
+  chown "$user:$user" "$config_path"
+}
+
+function generate_systemd_config {
   local -r service="$1"
-  local -r software="$2"
+  local -r systemd_config_path="$2"
+  local -r user="$3"
+  local -r exec_start="$4"
+  local -r config_dir="$5"
+  local -r config_file="$6"
+  local -r bin_dir="$7"
+  local -r data_dir="$8"
+  shift 7
+  local -r config_path="$config_dir/$config_file"
+  if [[ -z "$data_dir" ]]; then
+    local -r exec_string="$${exec_start} -config=$${config_path}"
+  else
+    local -r exec_string="$${exec_start} -config=$${config_path} -data-dir=$${data_dir}"
+  fi
 
-  log "INFO" $${func} "Creating $${software} service"
-  if [ "$${software}" == "consul" ]; then
-    cat <<EOF > /tmp/outy
+  log_info "Creating systemd config file to run Consul in $systemd_config_path/$service.service"
+
+  local -r unit_config=$(cat <<EOF
 [Unit]
-Description="HashiCorp Consul - A service mesh solution"
-Documentation=https://www.consul.io/
+Description="HashiCorp $service"
+Documentation=https://www.hashicorp.com/
 Requires=network-online.target
 After=network-online.target
-ConditionFileNotEmpty=$${DEFAULT_CONSUL_PATH}/$${DEFAULT_CONSUL_CONFIG}
+ConditionFileNotEmpty=$config_path
+EOF
+)
 
+  local -r service_config=$(cat <<EOF
 [Service]
-User=$${DEFAULT_CONSUL_USER}
-Group=$${DEFAULT_CONSUL_USER}
-ExecStart=$${DEFAULT_CONSUL_INSTALL_PATH} agent -config-file=$${DEFAULT_CONSUL_PATH}/$${DEFAULT_CONSUL_CONFIG}
-ExecReload=$${DEFAULT_CONSUL_INSTALL_PATH} reload
+Type=notify
+User=$user
+Group=$user
+ExecStart=$exec_string
+ExecReload=$bin_dir/$service reload
 KillMode=process
 Restart=on-failure
 LimitNOFILE=65536
+EOF
+)
 
+  local -r install_config=$(cat <<EOF
 [Install]
 WantedBy=multi-user.target
 EOF
-  fi
-  if [ "$${software}" == "vault" ]; then
-  cat <<EOF > /tmp/outy
-[Unit]
-Description="HashiCorp Vault - A tool for managing secrets"
-Documentation=https://www.vaultproject.io/docs/
-Requires=network-online.target
-After=network-online.target
-ConditionFileNotEmpty=$${DEFAULT_VAULT_PATH}/$${DEFAULT_VAULT_CONFIG}
-[Service]
-User=$${DEFAULT_VAULT_USER}
-Group=$${DEFAULT_VAULT_USER}
-ProtectSystem=full
-ProtectHome=read-only
-PrivateTmp=yes
-PrivateDevices=yes
-SecureBits=keep-caps
-AmbientCapabilities=CAP_IPC_LOCK
-CapabilityBoundingSet=CAP_SYSLOG CAP_IPC_LOCK
-NoNewPrivileges=yes
-ExecStart=$${DEFAULT_VAULT_INSTALL_PATH} server -config=$${DEFAULT_VAULT_PATH}
-ExecReload=/bin/kill --signal HUP \$MAINPID
-KillMode=process
-KillSignal=SIGINT
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=30
-StartLimitInterval=60
-StartLimitBurst=3
-[Install]
-WantedBy=multi-user.target
-EOF
-  fi
+)
 
-  sudo cp /tmp/outy $${service}
-  sudo systemctl enable $${service}
+  echo -e "$unit_config" > "$systemd_config_path/$service.service"
+  echo -e "$service_config" >> "$systemd_config_path/$service.service"
+  echo -e "$install_config" >> "$systemd_config_path/$service.service"
+}
+
+function start_consul {
+  log_info "Reloading systemd config and starting Consul"
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable consul.service
+  sudo systemctl restart consul.service
+}
+
+function configure_gossip_encryption {
+  local -r bucket="$1"
+  local -r bucketkms="$2"
+  local -r path="$3"
+
+  aws s3 ls s3://${bucket}/gossip_encrypt_key
+  ec=$?
+  case $ec in
+    0) log_info "Gossip Encryption Key already exists"
+       gossip_encrypt_key=`aws s3 cp s3://${bucket}/gossip_encrypt_key - --sse aws:kms --sse-kms-key-id=${bucketkms}`
+    ;;
+    1) log_info "Creating Gossip Encryption Key"
+       gossip_encrypt_key=`$path/bin/consul keygen`
+       echo  $gossip_encrypt_key > gossip_encrypt_key
+       aws s3 cp gossip_encrypt_key s3://${bucket}/gossip_encrypt_key --sse aws:kms --sse-kms-key-id=${bucketkms}
+       rm gossip_encrypt_key
+    ;;
+    *) log_error "Error, aws s3 ls for gossip_encrypt_key did not return 0 or 1, but instead $ec"
+    ;;
+  esac
+}
+
+function create_ca {
+  local -r bucket="$1"
+  local -r bucketkms="$2"
+  local -r path="$3"
+  local -r ca_path="$4"
+  local -r datacenter="$5"
+  local -r cert_file_path="$6"
+  local -r key_file_path="$7"
+
+  ca_private_key_path=$path/tls/ca/ca_private_key.pem
+
+  aws s3 ls s3://$bucket/consul-agent-ca-key.pem
+  ec=$?
+  case $ec in
+    0) log_info "Consul CA already exists"
+       aws s3 cp s3://$bucket/consul-agent-ca.pem $ca_path
+       aws s3 cp s3://$bucket/consul-agent-ca-key.pem $ca_private_key_path --sse aws:kms --sse-kms-key-id=$bucketkms
+    ;;
+    1) log_info "Creating CA"
+       $path/bin/consul tls ca create
+       cp consul-agent-ca.pem $ca_path
+       aws s3 cp consul-agent-ca.pem s3://$bucket/consul-agent-ca.pem
+       cp consul-agent-ca-key.pem $ca_private_key_path
+       aws s3 cp consul-agent-ca-key.pem s3://$bucket/consul-agent-ca-key.pem --sse aws:kms --sse-kms-key-id=$bucketkms
+    ;;
+    *) log_error "Error, aws s3 ls for consul-agent-ca-key.pem did not return 0 or 1, but instead $ec"
+    ;;
+  esac
+  $path/bin/consul tls cert create -server -ca=$ca_path -key=$ca_private_key_path -dc=$datacenter
+  cp $datacenter-server-consul-0.pem $cert_file_path
+  cp $datacenter-server-consul-0-key.pem $key_file_path
+}
+
+function enable_acls {
+  local -r bucket="$1"
+  local -r bucketkms="$2"
+  local -r path="$3"
+
+  log_info "Bootstrapping ACLs"
+  sleep 20
+
+  aws s3 ls s3://${bucket}/consul-http-token
+  ec=$?
+  case $ec in
+    0) log_info "Consul ACLs already bootstrapped" 
+
+       consul_http_token=`aws s3 cp s3://${bucket}/consul-http-token - --sse aws:kms --sse-kms-key-id=${bucketkms}`
+       sed -i "/\"acl\":/a \"tokens\": { \"agent\":  \"$consul_http_token\" }," /opt/consul/config/default.json
+       service consul restart
+    ;;
+    *) log_error "Error, aws s3 ls for consul-http-token did not return 0, but instead $ec"
+    ;;
+  esac
+}
+
+function install_license {
+  local -r consul_license_arn="$1"
+  local -r consul_http_token="$2"
+
+  log_info "Installing Enterprise License"
+  aws configure set region $(get_instance_region)
+  if [[ -z $consul_http_token ]]; then
+    aws lambda invoke --function-name $consul_license_arn  --payload "{\"consul_server\": \"http://`curl http://169.254.169.254/latest/meta-data/local-ipv4`\"}" /dev/null
+  else
+    aws lambda invoke --function-name $consul_license_arn  --payload "{\"consul_server\": \"http://`curl http://169.254.169.254/latest/meta-data/local-ipv4`\", \"token\": \"$${consul_http_token}\"}" /dev/null
+  fi
 }
 
 function main {
-  local func="main"
-  if [ -e $${TMP_DIR} ]; then
-    rm -rf "$${TMP_DIR}"
-  fi
-  mkdir "$${TMP_DIR}"
-
-  log "INFO" "$${func}" "Starting Vault install"
+  log_info "Starting Consul install"
   install_dependencies
-  create_user "$${DEFAULT_VAULT_USER}"
-  create_user "$${DEFAULT_CONSUL_USER}"
-  # if there is no version then we are going to get binary from S3
-  # else we download from Vault site
-  if [ -z $${CONSUL_BINARY} ]; then
-    CONSUL_TMP_ZIP="consul_$${CONSUL_VERSION}_linux_amd64.zip"
-    get_binary "$${CONSUL_VERSION}" 0 "consul" "$${CONSUL_TMP_ZIP}"
-  else
-    if [[ $${CONSUL_BINARY} =~ ^s3:// ]]; then
-      CONSUL_TMP_ZIP="consul.zip"
-      get_binary "$${CONSUL_BINARY}" 1 "consul" "$${CONSUL_TMP_ZIP}"
-    else
-      log "ERROR" "$${func}" "Consul binary is $${CONSUL_BINARY} but should be an s3 url"
-    fi
-  fi
-  if [ -z $${VAULT_BINARY} ]; then
-    VAULT_TMP_ZIP="vault_$${VAULT_VERSION}_linux_amd64.zip"
-    get_binary "$${VAULT_VERSION}" 0 "vault" "$${VAULT_TMP_ZIP}"
-  else
-    if [[ $${VAULT_BINARY} =~ ^s3:// ]]; then
-      VAULT_TMP_ZIP="vault.zip"
-      get_binary "$${VAULT_BINARY}" 1 "vault" "$${VAULT_TMP_ZIP}"
-    else
-      log "ERROR" "$${func}" "Vault binary is $${VAULT_BINARY} but should be an s3 url"
-    fi
-  fi
-  install_binary "$${DEFAULT_CONSUL_INSTALL_PATH}" "$${TMP_DIR}" "$${CONSUL_TMP_ZIP}" consul
-  install_binary "$${DEFAULT_VAULT_INSTALL_PATH}" "$${TMP_DIR}" "$${VAULT_TMP_ZIP}" vault
-  consul_dl_ver=$(get_consul_version)
-  create_install_paths "$${DEFAULT_CONSUL_PATH}" "$${DEFAULT_CONSUL_USER}" "$${DEFAULT_CONSUL_CONFIG}" "$${DEFAULT_CONSUL_OPT}" "$${CLUSTER_TAG_VALUE}" consul $${consul_dl_ver}
-  create_install_paths "$${DEFAULT_VAULT_PATH}" "$${DEFAULT_VAULT_USER}" "$${DEFAULT_VAULT_CONFIG}" "$${DEFAULT_VAULT_OPT}" "$${VAULT_CLUSTER_TAG}" vault
-  create_service "$${DEFAULT_CONSUL_SERVICE}" consul
-  create_service "$${DEFAULT_VAULT_SERVICE}" vault
+  create_user "$${CONSUL_USER}"
+  create_user "$${VAULT_USER}"
+  create_consul_install_paths "$CONSUL_PATH" "$CONSUL_USER"
+# This should be fixed
+  create_consul_install_paths "$VAULT_PATH" "$VAULT_USER"
 
-  log "INFO" "$${func}" "Vault install complete!"
-  sudo rm -rf "$${TMP_DIR}"
+  fetch_binary "consul" "$CONSUL_VERSION" "$CONSUL_DOWNLOAD_URL"
+  install_binary "$CONSUL_PATH" "$CONSUL_USER"
+  fetch_binary "vault" "$VAULT_VERSION" "$VAULT_DOWNLOAD_URL"
+  install_binary "$VAULT_PATH" "$VAULT_USER"
+
+  if command -v consul; then
+    log_info "Consul install complete!";
+  else
+    log_info "Could not find consul command. Aborting.";
+    exit 1;
+  fi
+
+  %{ if enable_gossip_encryption }
+  configure_gossip_encryption ${bucket} ${bucketkms} "$CONSUL_PATH"
+  %{ endif }
+  %{ if enable_rpc_encryption && ca_path == "" }
+  create_ca ${bucket} ${bucketkms} "$CONSUL_PATH" "$CA_PATH" "$DATACENTER" "$CERT_FILE_PATH" "$KEY_FILE_PATH"
+  %{ endif }
+
+  assert_is_installed "systemctl"
+  assert_is_installed "aws"
+  assert_is_installed "curl"
+  assert_is_installed "jq"
+
+  if [[ -z "$config_dir" ]]; then
+    config_dir=$(cd "$CONSUL_PATH/config" && pwd)
+  fi
+
+  if [[ -z "$data_dir" ]]; then
+    data_dir=$(cd "$CONSUL_PATH/data" && pwd)
+  fi
+
+  # If $systemd_stdout and/or $systemd_stderr are empty, we leave them empty so that generate_systemd_config will use systemd's defaults (journal and inherit, respectively)
+
+  generate_consul_config false \
+    "$CONSUL_PATH/config" \
+    "$user" \
+    ${cluster_tag_key} \
+    ${cluster_tag_value} \
+    "$DATACENTER" \
+    ${enable_gossip_encryption} \
+    "$gossip_encrypt_key" \
+    "$enable_rpc_encryption" \
+    "$ca_path" \
+    "$cert_file_path" \
+    "$key_file_path" \
+    ${enable_acls} \
+    "$AUTOPILOT_CLEANUP_DEAD_SERVERS" \
+    "$AUTOPILOT_LAST_CONTACT_THRESHOLD" \
+    "$AUTOPILOT_MAX_TRAILING_LOGS" \
+    "$AUTOPILOT_SERVER_STABILIZATION_TIME" \
+    "$AUTOPILOT_REDUNDANCY_ZONE_TAG" \
+    "$AUTOPILOT_DISABLE_UPGRADE_MIGRATION" \
+    "$AUTOPILOT_UPGRADE_VERSION_TAG" \
+    "$${recursors[@]}"
+
+  generate_systemd_config "consul" \
+    "$SYSTEMD_CONFIG_PATH" \
+    "$user" \
+    "$CONSUL_PATH/bin/consul agent" \
+    "$CONSUL_PATH/config" \
+    "default.json" \
+    "$CONSUL_PATH/bin" \
+    "$CONSUL_PATH/data"
+  start_consul
+
+  log_info "Wait for cluster to load"
+  retry "curl localhost:8500/v1/status/leader | grep :" "Waiting for cluster leader" 100
+
+  %{ if enable_acls }
+  enable_acls ${bucket} ${bucketkms} $CONSUL_PATH
+  %{ endif }
+
+
+  generate_consul_config false \
+    "$CONSUL_PATH/config" \
+    "$user" \
+    "$consul_http_token"
+  }
+
+  generate_systemd_config "vault" \
+    "$SYSTEMD_CONFIG_PATH" \
+    "$VAULT_USER" \
+    "$VAULT_PATH/bin/vault server" \
+    "$VAULT_PATH/config" \
+    "vault.hcl" \
+    "$VAULT_PATH/bin"
+  }
+  service vault restart
 }
 
-main "$@"
+main $@
