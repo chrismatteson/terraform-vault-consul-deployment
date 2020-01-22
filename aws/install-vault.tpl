@@ -8,6 +8,7 @@ readonly SYSTEM_BIN_DIR="/usr/local/bin"
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly AWS_ASG_TAG_KEY="aws:autoscaling:groupName"
 readonly CONSUL_CONFIG_FILE="default.json"
+readonly VAULT_CONFIG_FILE="vault.json"
 readonly CONSUL_GOSSIP_ENCRYPTION_CONFIG_FILE="gossip-encryption.json"
 readonly CONSUL_RPC_ENCRYPTION_CONFIG_FILE="rpc-encryption.json"
 readonly SYSTEMD_CONFIG_PATH="/etc/systemd/system"
@@ -15,7 +16,8 @@ readonly EC2_INSTANCE_METADATA_URL="http://169.254.169.254/latest/meta-data"
 readonly EC2_INSTANCE_DYNAMIC_DATA_URL="http://169.254.169.254/latest/dynamic"
 readonly MAX_RETRIES=30
 readonly SLEEP_BETWEEN_RETRIES_SEC=10
-readonly CONSUL_PATH=%{ if path != "" }${path}%{else}"/opt/consul"%{endif}
+readonly CONSUL_PATH=%{ if consul_path != "" }${consul_path}%{else}"/opt/consul"%{endif}
+readonly VAULT_PATH=%{ if vault_path != "" }${vault_path}%{else}"/opt/vault"%{endif}
 readonly CA_PATH=%{ if ca_path != "" }${ca_path}%{else}"$CONSUL_PATH/tls/ca/ca.pem"%{endif}
 readonly CA_PRIVATE_KEY_PATH=$CONSUL_PATH/tls/ca/ca_private_key.pem
 readonly CERT_FILE_PATH=%{ if cert_file_path != "" }${cert_file_path}%{else}"$CONSUL_PATH/tls/server.pem"%{endif}
@@ -131,7 +133,7 @@ function user_exists {
   id "$username" >/dev/null 2>&1
 }
 
-function create_consul_user {
+function create_user {
   local -r username="$1"
 
   if $(user_exists "$username"); then
@@ -167,7 +169,7 @@ function fetch_binary {
   fi
 
   retry \
-    "curl -o '$${DOWNLOAD_PACKAGE_DIR/$${product}.zip' '$download_url' --location --silent --fail --show-error" \
+    "curl -o '$${DOWNLOAD_PACKAGE_DIR}/$${product}.zip' '$download_url' --location --silent --fail --show-error" \
     "Downloading $${product} to $DOWNLOAD_PACKAGE_DIR" \
     5
 }
@@ -373,7 +375,7 @@ function generate_vault_config {
   local -r config_dir="$1"
   local -r user="$2"
   local -r consul_http_token="$3"
-  local -r config_path="$config_dir/$CONSUL_CONFIG_FILE"
+  local -r config_path="$config_dir/$VAULT_CONFIG_FILE"
 
   local instance_id=""
   local instance_ip_address=""
@@ -413,7 +415,7 @@ EOF
   fi
 
   log_info "Creating default Vault configuration"
-  local default_vault_json=$(cat <<EOF
+  local default_config_json=$(cat <<EOF
 {
 listener "tcp" {
   tls_cert_file            = "$${VAULT_PATH}/tls.crt"
@@ -445,18 +447,12 @@ function generate_systemd_config {
   local -r service="$1"
   local -r systemd_config_path="$2"
   local -r user="$3"
-  local -r exec_start="$4"
+  local -r exec_string="$4"
   local -r config_dir="$5"
   local -r config_file="$6"
   local -r bin_dir="$7"
-  local -r data_dir="$8"
   shift 7
   local -r config_path="$config_dir/$config_file"
-  if [[ -z "$data_dir" ]]; then
-    local -r exec_string="$${exec_start} -config=$${config_path}"
-  else
-    local -r exec_string="$${exec_start} -config=$${config_path} -data-dir=$${data_dir}"
-  fi
 
   log_info "Creating systemd config file to run Consul in $systemd_config_path/$service.service"
 
@@ -602,9 +598,9 @@ function main {
   create_consul_install_paths "$VAULT_PATH" "$VAULT_USER"
 
   fetch_binary "consul" "$CONSUL_VERSION" "$CONSUL_DOWNLOAD_URL"
-  install_binary "$CONSUL_PATH" "$CONSUL_USER"
+  install_binary "consul" "$CONSUL_PATH" "$CONSUL_USER"
   fetch_binary "vault" "$VAULT_VERSION" "$VAULT_DOWNLOAD_URL"
-  install_binary "$VAULT_PATH" "$VAULT_USER"
+  install_binary "vault" "$VAULT_PATH" "$VAULT_USER"
 
   if command -v consul; then
     log_info "Consul install complete!";
@@ -660,11 +656,10 @@ function main {
   generate_systemd_config "consul" \
     "$SYSTEMD_CONFIG_PATH" \
     "$user" \
-    "$CONSUL_PATH/bin/consul agent" \
+    "$CONSUL_PATH/bin/consul agent -config-dir=$CONSUL_PATH/config -data-dir=$CONSUL_PATH/data" \
     "$CONSUL_PATH/config" \
     "default.json" \
-    "$CONSUL_PATH/bin" \
-    "$CONSUL_PATH/data"
+    "$CONSUL_PATH/bin"
   start_consul
 
   log_info "Wait for cluster to load"
@@ -675,20 +670,17 @@ function main {
   %{ endif }
 
 
-  generate_consul_config false \
-    "$CONSUL_PATH/config" \
+  generate_consul_config "$CONSUL_PATH/config" \
     "$user" \
     "$consul_http_token"
-  }
 
   generate_systemd_config "vault" \
     "$SYSTEMD_CONFIG_PATH" \
     "$VAULT_USER" \
-    "$VAULT_PATH/bin/vault server" \
+    "$VAULT_PATH/bin/vault server -config=$VAULT_PATH/config/vault.hcl" \
     "$VAULT_PATH/config" \
     "vault.hcl" \
     "$VAULT_PATH/bin"
-  }
   service vault restart
 }
 

@@ -240,7 +240,7 @@ module "compress_consul" {
     {
       consul_version                      = var.consul_version,
       consul_download_url                 = var.consul_download_url,
-      path                                = var.path,
+      consul_path                         = var.consul_path,
       consul_user                         = var.consul_user,
       ca_path                             = var.ca_path,
       cert_file_path                      = var.cert_file_path,
@@ -343,7 +343,8 @@ module "compress_vault" {
       consul_download_url                 = var.consul_download_url,
       vault_version                       = var.vault_version,
       vault_download_url                  = var.vault_download_url,
-      path                                = var.path,
+      consul_path                         = var.consul_path,
+      vault_path                          = var.vault_path,
       consul_user                         = var.consul_user,
       vault_user                          = var.vault_user,
       ca_path                             = var.ca_path,

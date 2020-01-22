@@ -14,7 +14,7 @@ readonly EC2_INSTANCE_METADATA_URL="http://169.254.169.254/latest/meta-data"
 readonly EC2_INSTANCE_DYNAMIC_DATA_URL="http://169.254.169.254/latest/dynamic"
 readonly MAX_RETRIES=30
 readonly SLEEP_BETWEEN_RETRIES_SEC=10
-readonly CONSUL_PATH=%{ if path != "" }${path}%{else}"/opt/consul"%{endif}
+readonly CONSUL_PATH=%{ if consul_path != "" }${consul_path}%{else}"/opt/consul"%{endif}
 readonly CA_PATH=%{ if ca_path != "" }${ca_path}%{else}"$CONSUL_PATH/tls/ca/ca.pem"%{endif}
 readonly CA_PRIVATE_KEY_PATH=$CONSUL_PATH/tls/ca/ca_private_key.pem
 readonly CERT_FILE_PATH=%{ if cert_file_path != "" }${cert_file_path}%{else}"$CONSUL_PATH/tls/server.pem"%{endif}
