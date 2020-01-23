@@ -275,17 +275,18 @@ function split_by_lines {
 }
 
 function generate_consul_config {
-  local -r server="$${1}"
-  local -r config_dir="$${2}"
-  local -r user="$${3}"
-  local -r cluster_tag_key="$${4}"
-  local -r cluster_tag_value="$${5}"
-  local -r datacenter="$${6}"
-  local -r enable_gossip_encryption="$${7}"
-  local -r gossip_encryption_key="$${8}"
+  local -r server="$1"
+  local -r config_dir="$2"
+  local -r user="$3"
+  local -r cluster_tag_key="$4"
+  local -r cluster_tag_value="$5"
+  local -r datacenter="$6"
+  local -r enable_gossip_encryption="$7"
+  local -r gossip_encryption_key="$8"
+  local -r enable_acls="$9"
   local -r config_path="$config_dir/$CONSUL_CONFIG_FILE"
 
-  shift 20
+  shift 9
   local -r recursors=("$@")
 
   local instance_id=""
@@ -426,7 +427,7 @@ listener "tcp" {
 }
 storage "consul" {
   address         = "127.0.0.1:7501"
-  token           = $${consul_http_token}
+  token           = "$${consul_http_token}"
   path            = "vault/"
   scheme          = "https"
   tls_ca_file     = "$${VAULT_PATH}/ca_cert.pem"
@@ -439,7 +440,7 @@ ui       = true
 EOF
 )
   log_info "Installing Vault config file in $config_path"
-  echo "$default_config_json" | jq '.' > "$config_path"
+  echo "$default_config_json" > "$config_path"
   chown "$user:$user" "$config_path"
 }
 
@@ -454,7 +455,7 @@ function generate_systemd_config {
   shift 7
   local -r config_path="$config_dir/$config_file"
 
-  log_info "Creating systemd config file to run Consul in $systemd_config_path/$service.service"
+  log_info "Creating systemd config file to run $service in $systemd_config_path/$service.service"
 
   local -r unit_config=$(cat <<EOF
 [Unit]
@@ -465,6 +466,13 @@ After=network-online.target
 ConditionFileNotEmpty=$config_path
 EOF
 )
+  if [[ $product == "vault" ]]; then
+    local -r extra_unit_config=$(cat <<EOF
+StartLimitIntervalSec=60
+StartLimitBurst=3
+EOF
+)
+  fi
 
   local -r service_config=$(cat <<EOF
 [Service]
@@ -479,6 +487,29 @@ LimitNOFILE=65536
 EOF
 )
 
+  if [[ $product == "vault" ]]; then
+    local -r extra_service_config=$(cat <<EOF
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+SecureBits=keep-caps
+AmbientCapabilities=CAP_IPC_LOCK
+Capabilities=CAP_IPC_LOCK+ep
+CapabilityBoundingSet=CAP_SYSLOG CAP_IPC_LOCK
+NoNewPrivileges=yes
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+StartLimitInterval=60
+StartLimitIntervalSec=60
+StartLimitBurst=3
+LimitMEMLOCK=infinity
+EOF
+)
+fi
+
   local -r install_config=$(cat <<EOF
 [Install]
 WantedBy=multi-user.target
@@ -486,7 +517,9 @@ EOF
 )
 
   echo -e "$unit_config" > "$systemd_config_path/$service.service"
+  echo -e "$extra_unit_config" >> "$systemd_config_path/$service.service"
   echo -e "$service_config" >> "$systemd_config_path/$service.service"
+  echo -e "$extra_service_config" >> "$systemd_config_path/$service.service"
   echo -e "$install_config" >> "$systemd_config_path/$service.service"
 }
 
@@ -633,29 +666,18 @@ function main {
 
   generate_consul_config false \
     "$CONSUL_PATH/config" \
-    "$user" \
+    "$CONSUL_USER" \
     ${cluster_tag_key} \
     ${cluster_tag_value} \
     "$DATACENTER" \
     ${enable_gossip_encryption} \
     "$gossip_encrypt_key" \
-    "$enable_rpc_encryption" \
-    "$ca_path" \
-    "$cert_file_path" \
-    "$key_file_path" \
     ${enable_acls} \
-    "$AUTOPILOT_CLEANUP_DEAD_SERVERS" \
-    "$AUTOPILOT_LAST_CONTACT_THRESHOLD" \
-    "$AUTOPILOT_MAX_TRAILING_LOGS" \
-    "$AUTOPILOT_SERVER_STABILIZATION_TIME" \
-    "$AUTOPILOT_REDUNDANCY_ZONE_TAG" \
-    "$AUTOPILOT_DISABLE_UPGRADE_MIGRATION" \
-    "$AUTOPILOT_UPGRADE_VERSION_TAG" \
     "$${recursors[@]}"
 
   generate_systemd_config "consul" \
     "$SYSTEMD_CONFIG_PATH" \
-    "$user" \
+    "$CONSUL_USER" \
     "$CONSUL_PATH/bin/consul agent -config-dir=$CONSUL_PATH/config -data-dir=$CONSUL_PATH/data" \
     "$CONSUL_PATH/config" \
     "default.json" \
@@ -670,8 +692,8 @@ function main {
   %{ endif }
 
 
-  generate_consul_config "$CONSUL_PATH/config" \
-    "$user" \
+  generate_vault_config "$CONSUL_PATH/config" \
+    "$VAULT_USER" \
     "$consul_http_token"
 
   generate_systemd_config "vault" \
