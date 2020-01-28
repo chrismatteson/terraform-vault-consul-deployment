@@ -16,9 +16,60 @@ locals {
   )
 }
 
+module "bastion_vpc" {
+  source = "terraform-aws-modules/vpc/aws"
+  name   = "${random_id.project_name.hex}-bastion"
+
+  cidr = "10.1.0.0/16"
+
+  azs             = ["us-east-1a"]
+  private_subnets = ["10.1.1.0/24"]
+  public_subnets  = ["10.1.101.0/24"]
+
+  enable_nat_gateway = true
+  single_nat_gateway = true
+
+  public_subnet_tags = {
+    Name = "overridden-name-public"
+  }
+
+  tags = local.tags
+
+  vpc_tags = {
+    Name = "${random_id.project_name.hex}-vpc"
+  }
+}
+
+resource "aws_default_security_group" "bastion_default" {
+  vpc_id = module.bastion_vpc.vpc_id
+
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = -1
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "bastion" {
+  ami           = data.aws_ami.latest-image.id
+  instance_type = "t2.micro"
+  subnet_id     = module.bastion_vpc.public_subnets[0]
+  key_name      = var.ssh_key_name
+
+  tags = local.tags
+}
+
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
-  name   = "${random_id.project_name.hex}"
+  name   = "${random_id.project_name.hex}-vpc"
 
   cidr = "10.0.0.0/16"
 
@@ -39,6 +90,66 @@ module "vpc" {
     Name = "${random_id.project_name.hex}-vpc"
   }
 }
+
+resource "aws_default_security_group" "vpc_default" {
+  vpc_id = module.vpc.vpc_id
+
+  ingress {
+    from_port = 0
+    to_port   = 0
+    protocol  = -1
+    self      = true
+  }
+
+  ingress {
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_default_security_group.bastion_default.id]
+  }
+
+  ingress {
+    from_port       = 8200
+    to_port         = 8200
+    protocol        = "tcp"
+    security_groups = [aws_default_security_group.bastion_default.id]
+  }
+
+  ingress {
+    from_port       = 8500
+    to_port         = 8500
+    protocol        = "tcp"
+    security_groups = [aws_default_security_group.bastion_default.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_vpc_peering_connection" "bastion_connectivity" {
+  peer_vpc_id = module.bastion_vpc.vpc_id
+  vpc_id      = module.vpc.vpc_id
+  auto_accept = true
+}
+
+resource "aws_route" "vpc" {
+  count                     = length(module.bastion_vpc.public_subnets_cidr_blocks)
+  route_table_id            = module.vpc.public_route_table_ids[0]
+  destination_cidr_block    = element(module.bastion_vpc.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity.id
+}
+
+resource "aws_route" "bastion_vpc" {
+  count                     = length(module.vpc.public_subnets_cidr_blocks)
+  route_table_id            = module.bastion_vpc.public_route_table_ids[0]
+  destination_cidr_block    = element(module.vpc.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity.id
+}
+
 
 # AWS S3 Bucket for Certificates, Private Keys, Encryption Key, and License
 resource "aws_kms_key" "bucketkms" {
@@ -339,40 +450,41 @@ module "compress_vault" {
   shell    = "bash"
   content = templatefile("${path.module}/install-vault.tpl",
     {
-      consul_version                      = var.consul_version,
-      consul_download_url                 = var.consul_download_url,
-      vault_version                       = var.vault_version,
-      vault_download_url                  = var.vault_download_url,
-      consul_path                         = var.consul_path,
-      vault_path                          = var.vault_path,
-      consul_user                         = var.consul_user,
-      vault_user                          = var.vault_user,
-      ca_path                             = var.ca_path,
-      cert_file_path                      = var.cert_file_path,
-      key_file_path                       = var.key_file_path,
-      server                              = var.server,
-      client                              = var.client,
-      config_dir                          = var.config_dir,
-      data_dir                            = var.data_dir,
-      systemd_stdout                      = var.systemd_stdout,
-      systemd_stderr                      = var.systemd_stderr,
-      bin_dir                             = var.bin_dir,
-      cluster_tag_key                     = var.cluster_tag_key,
-      cluster_tag_value                   = var.cluster_tag_value,
-      datacenter                          = var.datacenter,
-      enable_gossip_encryption            = var.enable_gossip_encryption,
-      enable_rpc_encryption               = var.enable_rpc_encryption,
-      environment                         = var.environment,
-      recursor                            = var.recursor,
-      bucket                              = aws_s3_bucket.consul_setup.id,
-      bucketkms                           = aws_kms_key.bucketkms.id,
-      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "",
-      enable_acls                         = var.enable_acls,
-      enable_consul_http_encryption       = var.enable_consul_http_encryption,
-      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
+      consul_version                = var.consul_version,
+      consul_download_url           = var.consul_download_url,
+      vault_version                 = var.vault_version,
+      vault_download_url            = var.vault_download_url,
+      consul_path                   = var.consul_path,
+      vault_path                    = var.vault_path,
+      consul_user                   = var.consul_user,
+      vault_user                    = var.vault_user,
+      ca_path                       = var.ca_path,
+      cert_file_path                = var.cert_file_path,
+      key_file_path                 = var.key_file_path,
+      server                        = var.server,
+      client                        = var.client,
+      config_dir                    = var.config_dir,
+      data_dir                      = var.data_dir,
+      systemd_stdout                = var.systemd_stdout,
+      systemd_stderr                = var.systemd_stderr,
+      bin_dir                       = var.bin_dir,
+      cluster_tag_key               = var.cluster_tag_key,
+      cluster_tag_value             = var.cluster_tag_value,
+      datacenter                    = var.datacenter,
+      enable_gossip_encryption      = var.enable_gossip_encryption,
+      enable_rpc_encryption         = var.enable_rpc_encryption,
+      environment                   = var.environment,
+      recursor                      = var.recursor,
+      bucket                        = aws_s3_bucket.consul_setup.id,
+      bucketkms                     = aws_kms_key.bucketkms.id,
+      consul_license_arn            = var.consul_ent_license != "" ? module.lambda.arn : "",
+      enable_acls                   = var.enable_acls,
+      enable_consul_http_encryption = var.enable_consul_http_encryption,
+      consul_backup_bucket          = aws_s3_bucket.consul_backups[0].id,
     },
   )
 }
+
 module "vault" {
   source            = "terraform-aws-modules/autoscaling/aws"
   version           = "3.4.0"
@@ -383,6 +495,7 @@ module "vault" {
   min_size          = var.cluster_size
   desired_capacity  = var.cluster_size
   instance_type     = "t2.small"
+  target_group_arns = [aws_lb_target_group.vault.arn]
   #  vpc_id                      = module.vpc.vpc_id
   vpc_zone_identifier = module.vpc.public_subnets
   key_name            = var.ssh_key_name
@@ -400,3 +513,24 @@ module "vault" {
   ]
   user_data = module.compress_vault.userdata
 }
+
+resource "aws_lb" "vault" {
+  name               = "${random_id.project_name.hex}-vault-lb"
+  internal           = false
+  load_balancer_type = "application"
+  subnets            = module.vpc.public_subnets
+
+  enable_deletion_protection = true
+
+  tags = {
+    Environment = "production"
+  }
+}
+
+resource "aws_lb_target_group" "vault" {
+  name     = "${random_id.project_name.hex}-vault-lb"
+  port     = 8200
+  protocol = "HTTP"
+  vpc_id   = module.vpc.vpc_id
+}
+

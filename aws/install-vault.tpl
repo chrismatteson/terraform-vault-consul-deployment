@@ -8,7 +8,7 @@ readonly SYSTEM_BIN_DIR="/usr/local/bin"
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly AWS_ASG_TAG_KEY="aws:autoscaling:groupName"
 readonly CONSUL_CONFIG_FILE="default.json"
-readonly VAULT_CONFIG_FILE="vault.json"
+readonly VAULT_CONFIG_FILE="vault.hcl"
 readonly CONSUL_GOSSIP_ENCRYPTION_CONFIG_FILE="gossip-encryption.json"
 readonly CONSUL_RPC_ENCRYPTION_CONFIG_FILE="rpc-encryption.json"
 readonly SYSTEMD_CONFIG_PATH="/etc/systemd/system"
@@ -417,26 +417,15 @@ EOF
 
   log_info "Creating default Vault configuration"
   local default_config_json=$(cat <<EOF
-{
 listener "tcp" {
-  tls_cert_file            = "$${VAULT_PATH}/tls.crt"
-  tls_key_file             = "$${VAULT_PATH}/tls.key"
   address                  = "0.0.0.0:8200"
-  tls_disable              = "false"
+  tls_disable              = "true"
   tls_disable_client_certs = "true"
 }
 storage "consul" {
-  address         = "127.0.0.1:7501"
   token           = "$${consul_http_token}"
-  path            = "vault/"
-  scheme          = "https"
-  tls_ca_file     = "$${VAULT_PATH}/ca_cert.pem"
-  tls_cert_file   = "$${VAULT_PATH}/server_cert.pem"
-  tls_key_file    = "$${VAULT_PATH}/server_key.pem"
-  tls_skip_verify = "true"
 }
 ui       = true  
-}
 EOF
 )
   log_info "Installing Vault config file in $config_path"
@@ -466,7 +455,7 @@ After=network-online.target
 ConditionFileNotEmpty=$config_path
 EOF
 )
-  if [[ $product == "vault" ]]; then
+  if [[ $service == "vault" ]]; then
     local -r extra_unit_config=$(cat <<EOF
 StartLimitIntervalSec=60
 StartLimitBurst=3
@@ -487,7 +476,7 @@ LimitNOFILE=65536
 EOF
 )
 
-  if [[ $product == "vault" ]]; then
+  if [[ $service == "vault" ]]; then
     local -r extra_service_config=$(cat <<EOF
 ProtectSystem=full
 ProtectHome=read-only
@@ -692,7 +681,7 @@ function main {
   %{ endif }
 
 
-  generate_vault_config "$CONSUL_PATH/config" \
+  generate_vault_config "$VAULT_PATH/config" \
     "$VAULT_USER" \
     "$consul_http_token"
 
@@ -703,6 +692,7 @@ function main {
     "$VAULT_PATH/config" \
     "vault.hcl" \
     "$VAULT_PATH/bin"
+  systemctl enable vault
   service vault restart
 }
 
