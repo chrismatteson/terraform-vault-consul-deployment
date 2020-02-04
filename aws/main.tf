@@ -520,7 +520,7 @@ resource "aws_lb" "vault" {
   load_balancer_type = "application"
   subnets            = module.vpc.public_subnets
 
-  enable_deletion_protection = true
+  enable_deletion_protection = var.enable_deletion_protection
 
   tags = {
     Environment = "production"

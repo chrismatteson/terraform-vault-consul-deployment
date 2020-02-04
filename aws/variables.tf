@@ -61,3 +61,4 @@ variable "force_bucket_destroy" {
   type        = bool
 }
 variable "enable_consul_http_encryption" { default = false }
+variable "enable_deletion_protection" { default = true }
