@@ -516,7 +516,7 @@ module "vault" {
 
 resource "aws_lb" "vault" {
   name               = "${random_id.project_name.hex}-vault-lb"
-  internal           = false
+  internal           = true
   load_balancer_type = "application"
   subnets            = module.vpc.public_subnets
 
@@ -532,5 +532,19 @@ resource "aws_lb_target_group" "vault" {
   port     = 8200
   protocol = "HTTP"
   vpc_id   = module.vpc.vpc_id
+  health_check {
+    enabled = true
+    path    = "/ui/"
+  }
 }
 
+resource "aws_lb_listener" "vault" {
+  load_balancer_arn = aws_lb.vault.arn
+  port              = "8200"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.vault.arn
+  }
+}
