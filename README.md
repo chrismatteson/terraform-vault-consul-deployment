@@ -28,7 +28,7 @@ Reference: [Mount Filters](https://www.vaultproject.io/guides/operations/mount-f
 ## Systems Access Management - SSH Secrets Engine
 Reference: [SSH Secrets Engine](https://www.vaultproject.io/docs/secrets/ssh/index.html)
 
-# Applying the Terraform configuration
+## Applying the Terraform configuration
 
 Ensure that a `stable.tfvars` file exists, with the following keys set:
 
@@ -42,3 +42,7 @@ Then, ensure you are passing the `stable.tfvars` file when performing a `terrafo
 ```
 terraform apply -var-file=stable.tfvars
 ```
+
+## Accessing Provisioned Consul and Vault Instances
+
+The provisioned EC2 Instances are pre-configured with the [AWS Systems Manager Agent (SSM Agent)](https://docs.aws.amazon.com/systems-manager/latest/userguide/ssm-agent.html), and thus a secure shell can be accessed without using an SSH keypair, from the [SSM managed instances console](https://console.aws.amazon.com/systems-manager/managed-instances).
