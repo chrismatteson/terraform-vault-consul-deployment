@@ -1,6 +1,6 @@
 module "primary_cluster" {
   source                     = "./modules/aws"
-  region                     = "us-east-1"
+  region                     = "us-west-1"
   consul_cluster_size        = 6
   vault_cluster_size         = 3
   consul_ent_license         = var.consul_ent_license
