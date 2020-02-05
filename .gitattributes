@@ -1,2 +1,3 @@
 # Never modify line endings of our bash scripts
 *.sh -crlf
+*.tpl -crlf
