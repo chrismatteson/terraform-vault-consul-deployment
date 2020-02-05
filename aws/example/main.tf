@@ -111,63 +111,131 @@ resource "aws_vpc_peering_connection" "bastion_connectivity_dr" {
   provider    = aws.us-west-2
   peer_vpc_id = module.primary_cluster.bastion_vpc_id
   vpc_id      = module.dr_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "bastion_connectivity_dr" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_dr.id
+  auto_accept               = true
+
 }
 
 resource "aws_vpc_peering_connection" "bastion_connectivity_eu" {
   provider    = aws.eu-central-1
   peer_vpc_id = module.primary_cluster.bastion_vpc_id
   vpc_id      = module.eu_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "bastion_connectivity_eu" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_eu.id
+  auto_accept               = true
+
 }
 
 resource "aws_vpc_peering_connection" "bastion_connectivity_eu_dr" {
   provider    = aws.eu-west-1
   peer_vpc_id = module.primary_cluster.bastion_vpc_id
   vpc_id      = module.eu_dr_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "bastion_connectivity_eu_dr" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_eu_dr.id
+  auto_accept               = true
 }
 
 resource "aws_vpc_peering_connection" "bastion_connectivity_ap" {
   provider    = aws.ap-southeast-1
   peer_vpc_id = module.primary_cluster.bastion_vpc_id
   vpc_id      = module.ap_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "bastion_connectivity_ap" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_ap.id
+  auto_accept               = true
+
 }
 
 resource "aws_vpc_peering_connection" "vault_connectivity_dr" {
   provider    = aws.us-west-2
   peer_vpc_id = module.primary_cluster.vpc_id
   vpc_id      = module.dr_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "vault_connectivity_dr" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_dr.id
+  auto_accept               = true
+
 }
 
 resource "aws_vpc_peering_connection" "vault_connectivity_eu" {
   provider    = aws.eu-central-1
   peer_vpc_id = module.primary_cluster.vpc_id
   vpc_id      = module.eu_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "vault_connectivity_eu" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_eu.id
+  auto_accept               = true
+
 }
 
 resource "aws_vpc_peering_connection" "vault_connectivity_eu_dr" {
   provider    = aws.eu-west-1
   peer_vpc_id = module.primary_cluster.vpc_id
   vpc_id      = module.eu_dr_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "vault_connectivity_eu_dr" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_eu_dr.id
+  auto_accept               = true
 }
 
 resource "aws_vpc_peering_connection" "vault_connectivity_ap" {
   provider    = aws.ap-southeast-1
   peer_vpc_id = module.primary_cluster.vpc_id
   vpc_id      = module.ap_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "us-east-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "vault_connectivity_ap" {
+  provider                  = aws.us-east-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_ap.id
+  auto_accept               = true
 }
 
 resource "aws_vpc_peering_connection" "vault_connectivity_eu_eu_dr" {
   provider    = aws.eu-west-1
   peer_vpc_id = module.eu_cluster.vpc_id
   vpc_id      = module.eu_dr_cluster.vpc_id
-  auto_accept = true
+  auto_accept = false
+  peer_region = "eu-central-1"
+}
+
+resource "aws_vpc_peering_connection_accepter" "vault_connectivity_eu_eu_dr" {
+  provider                  = aws.eu-central-1
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_eu_eu_dr.id
+  auto_accept               = true
 }
 
 resource "aws_route" "bastion_vpc_dr" {
@@ -226,13 +294,13 @@ resource "aws_route" "vpc_bastion_eu_dr" {
   vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_eu_dr.id
 }
 
-resource "aws_route" "vpc_bastion_ap" {
-  provider                  = aws.us-east-1
-  count                     = length(module.primary_cluster.bastion_public_subnets)
-  route_table_id            = module.ap_cluster.route_table
-  destination_cidr_block    = element(module.primary_cluster.bastion_public_subnets, count.index)
-  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_ap.id
-}
+#resource "aws_route" "vpc_bastion_ap" {
+#  provider                  = aws.us-east-1
+#  count                     = length(module.primary_cluster.bastion_public_subnets)
+#  route_table_id            = module.ap_cluster.route_table
+#  destination_cidr_block    = element(module.primary_cluster.bastion_public_subnets, count.index)
+#  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_ap.id
+#}
 
 resource "aws_route" "vault_vpc_dr" {
   provider                  = aws.us-east-1
@@ -258,13 +326,13 @@ resource "aws_route" "vault_vpc_eu_dr" {
   vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_eu_dr.id
 }
 
-resource "aws_route" "vault_vpc_ap" {
-  provider                  = aws.us-east-1
-  count                     = length(module.ap_cluster.public_subnets)
-  route_table_id            = module.primary_cluster.bastion_route_table
-  destination_cidr_block    = element(module.ap_cluster.public_subnets, count.index)
-  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_ap.id
-}
+#resource "aws_route" "vault_vpc_ap" {
+#  provider                  = aws.us-east-1
+#  count                     = length(module.ap_cluster.public_subnets)
+#  route_table_id            = module.primary_cluster.bastion_route_table
+#  destination_cidr_block    = element(module.ap_cluster.public_subnets, count.index)
+#  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_ap.id
+#}
 
 resource "aws_route" "vpc_vault_dr" {
   provider                  = aws.us-west-2
