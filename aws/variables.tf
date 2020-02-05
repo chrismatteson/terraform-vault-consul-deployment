@@ -19,7 +19,7 @@ variable "subnet_ids" { default = "" }
 variable "consul_ent_license" { default = "" }
 variable "vault_ent_license" { default = "" }
 variable "consul_version" {
-  default = "1.6.3" 
+  default = "1.6.3"
 }
 variable "consul_download_url" { default = "" }
 variable "vault_version" {
