@@ -472,11 +472,10 @@ EOF
 
   local -r service_config=$(cat <<EOF
 [Service]
-Type=notify
 User=$user
 Group=$user
 ExecStart=$exec_string
-ExecReload=$bin_dir/$service reload
+ExecReload=/bin/kill --signal HUP $MAINPID
 KillMode=process
 Restart=on-failure
 LimitNOFILE=65536
