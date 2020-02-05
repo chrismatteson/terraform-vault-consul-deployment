@@ -17,6 +17,8 @@ This implementation provisions multiple Vault Enterprise clusters over the follo
 ## Dynamic Database Credentials - Postgresql Database Secrets Engine
 Reference: [Postgresql Database Secrets Engine](https://www.vaultproject.io/docs/secrets/databases/postgresql/)
 
+Prior to the Vault Enterprise implementation, ACME Corporation's website and ERP application relied on static credentials to connect to an RDS database. These credentials were scheduled for rotation during a downtime window every three months. Sometimes these downtime windows were missed, leading to back-to-back weeks of downtime windows. Furthermore, the static credentials being valid for three months also created a large window of of opprotunity for a malicious actor to retrieve them and use them without authorization.
+
 ## Database Encryption - Transit Secrets Engine
 Reference: [Transit Secrets Engine](https://www.vaultproject.io/docs/secrets/transit/index.html)
 
