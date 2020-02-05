@@ -1,5 +1,5 @@
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 }
 
 resource "random_id" "project_name" {
@@ -16,13 +16,17 @@ locals {
   )
 }
 
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 module "bastion_vpc" {
   source = "terraform-aws-modules/vpc/aws"
   name   = "${random_id.project_name.hex}-bastion"
 
   cidr = "10.1.0.0/16"
 
-  azs             = ["us-east-1a"]
+  azs             = [data.aws_availability_zones.available.names[0]]
   private_subnets = ["10.1.1.0/24"]
   public_subnets  = ["10.1.101.0/24"]
 
@@ -73,7 +77,7 @@ module "vpc" {
 
   cidr = "10.0.0.0/16"
 
-  azs             = ["us-east-1a", "us-east-1b", "us-east-1c"]
+  azs             = data.aws_availability_zones.available.names
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
 
@@ -393,9 +397,9 @@ module "consul" {
   image_id          = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
   name              = "${random_id.project_name.hex}-consul"
   health_check_type = "EC2"
-  max_size          = var.cluster_size
-  min_size          = var.cluster_size
-  desired_capacity  = var.cluster_size
+  max_size          = var.consul_cluster_size
+  min_size          = var.consul_cluster_size
+  desired_capacity  = var.consul_cluster_size
   instance_type     = "t2.small"
   #  vpc_id                      = module.vpc.vpc_id
   vpc_zone_identifier = module.vpc.public_subnets
@@ -491,9 +495,9 @@ module "vault" {
   image_id          = var.ami_id != "" ? var.ami_id : data.aws_ami.latest-image.id
   name              = "${random_id.project_name.hex}-vault"
   health_check_type = "EC2"
-  max_size          = var.cluster_size
-  min_size          = var.cluster_size
-  desired_capacity  = var.cluster_size
+  max_size          = var.vault_cluster_size
+  min_size          = var.vault_cluster_size
+  desired_capacity  = var.vault_cluster_size
   instance_type     = "t2.small"
   target_group_arns = [aws_lb_target_group.vault.arn]
   #  vpc_id                      = module.vpc.vpc_id

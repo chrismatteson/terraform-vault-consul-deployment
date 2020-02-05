@@ -1,6 +1,8 @@
+variable "region" { default = "us-east-1" }
 variable "prefix" { default = "" }
 variable "ssh_key_name" { default = "" }
-variable "cluster_size" { default = 5 }
+variable "consul_cluster_size" { default = 5 }
+variable "vault_cluster_size" { default = 3 }
 variable "ami_id" { default = "" }
 variable "ami_filter_owners" {
   description = "When bash install method, use a filter to lookup an image owner and name. Common combinations are 206029621532 and amzn2-ami-hvm* for Amazon Linux 2 HVM, and 099720109477 and ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-* for Ubuntu 18.04"
@@ -16,9 +18,13 @@ variable "vpc_id" { default = "" }
 variable "subnet_ids" { default = "" }
 variable "consul_ent_license" { default = "" }
 variable "vault_ent_license" { default = "" }
-variable "consul_version" { default = "" }
+variable "consul_version" {
+  default = "1.6.3" 
+}
 variable "consul_download_url" { default = "" }
-variable "vault_version" { default = "" }
+variable "vault_version" {
+  default = "1.3.2"
+}
 variable "vault_download_url" { default = "" }
 variable "cluster_tag_key" { default = "consul-servers" }
 variable "cluster_tag_value" { default = "auto-join" }
