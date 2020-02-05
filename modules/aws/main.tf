@@ -290,7 +290,7 @@ data "aws_ami" "latest-image" {
 module "lambda" {
   source                = "github.com/chrismatteson/terraform-lambda"
   function_name         = "${random_id.project_name.hex}-consul-license"
-  source_files          = [{ content = "install_license.py", filename = "install_license.py" }]
+  source_files          = [{ content = "${path.module}/install_license.py", filename = "${path.module}/install_license.py" }]
   environment_variables = { "LICENSE" = var.consul_ent_license }
   handler               = "install_license.lambda_handler"
   subnet_ids            = module.vpc.public_subnets
