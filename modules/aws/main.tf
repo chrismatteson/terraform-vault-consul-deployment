@@ -556,7 +556,7 @@ module "vault" {
 
 resource "aws_lb" "vault" {
   name               = "${random_id.project_name.hex}-vault-lb"
-  internal           = true
+  internal           = false
   load_balancer_type = "application"
   subnets            = module.vpc.public_subnets
 
