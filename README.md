@@ -1,4 +1,4 @@
-# ACME Corp - Vault Enterprise Implementation
+# ACME Corporation - Vault Enterprise Implementation
 
 This implementation provisions multiple Vault Enterprise clusters over the following regions:
 
