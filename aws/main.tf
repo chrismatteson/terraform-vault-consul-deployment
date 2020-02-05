@@ -420,7 +420,7 @@ module "consul" {
     [
       {
         key                 = var.cluster_tag_key
-        value               = var.cluster_tag_value
+        value               = "${random_id.project_name.hex}-${var.cluster_tag_value}"
         propagate_at_launch = true
       }
     ]
