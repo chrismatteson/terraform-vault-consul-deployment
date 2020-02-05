@@ -1,3 +1,7 @@
+output "Project_Name" {
+  value = random_id.project_name.hex
+}
+
 output "Connect_to_Bastion" {
   value = "ssh -i ${var.ssh_key_name}.pem ubuntu@${aws_instance.bastion.public_ip}"
 }
