@@ -68,3 +68,4 @@ variable "force_bucket_destroy" {
 }
 variable "enable_consul_http_encryption" { default = false }
 variable "enable_deletion_protection" { default = true }
+variable "subnet_second_octet" { default = "0" }
