@@ -360,7 +360,7 @@ EOF
     instance_tags=$(get_instance_tags "$instance_id" "$instance_region")
     cluster_size=$(get_cluster_size "$instance_tags" "$instance_region")
 
-    bootstrap_expect="\"bootstrap_expect\": $cluster_size,"
+    bootstrap_expect="\"bootstrap_expect\": $((($cluster_size+1)/2)),"
     ui="true"
   fi
 
