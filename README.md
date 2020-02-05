@@ -27,3 +27,18 @@ Reference: [Mount Filters](https://www.vaultproject.io/guides/operations/mount-f
 
 ## Systems Access Management - SSH Secrets Engine
 Reference: [SSH Secrets Engine](https://www.vaultproject.io/docs/secrets/ssh/index.html)
+
+# Applying the Terraform configuration
+
+Ensure that a `stable.tfvars` file exists, with the following keys set:
+
+```
+vault_ent_license="[ENTER VAULT ENT LICENSE HERE]"
+consul_ent_license="[ENTER CONSUL ENT LICENSE HERE]"
+```
+
+Then, ensure you are passing the `stable.tfvars` file when performing a `terraform apply`:
+
+```
+terraform apply -var-file=stable.tfvars
+```
