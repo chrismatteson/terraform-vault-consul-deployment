@@ -5,6 +5,7 @@ module "primary_cluster" {
   vault_cluster_size         = 3
   consul_ent_license         = var.consul_ent_license
   vault_ent_license          = var.vault_ent_license
+  subnet_second_octet        = "0"
   enable_deletion_protection = false
 }
 
@@ -15,6 +16,7 @@ module "dr_cluster" {
   vault_cluster_size         = 1
   consul_ent_license         = var.consul_ent_license
   vault_ent_license          = var.vault_ent_license
+  subnet_second_octet        = "1"
   enable_deletion_protection = false
 }
 
@@ -25,6 +27,7 @@ module "eu_cluster" {
   vault_cluster_size         = 1
   consul_ent_license         = var.consul_ent_license
   vault_ent_license          = var.vault_ent_license
+  subnet_second_octet        = "2"
   enable_deletion_protection = false
 }
 
@@ -35,6 +38,7 @@ module "eu_dr_cluster" {
   vault_cluster_size         = 1
   consul_ent_license         = var.consul_ent_license
   vault_ent_license          = var.vault_ent_license
+  subnet_second_octet        = "4"
   enable_deletion_protection = false
 }
 
@@ -45,5 +49,6 @@ module "ap_cluster" {
   vault_cluster_size         = 1
   consul_ent_license         = var.consul_ent_license
   vault_ent_license          = var.vault_ent_license
+  subnet_second_octet        = "4"
   enable_deletion_protection = false
 }
