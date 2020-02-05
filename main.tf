@@ -7,6 +7,7 @@ module "primary_cluster" {
   vault_ent_license          = var.vault_ent_license
   subnet_second_octet        = "0"
   enable_deletion_protection = false
+  force_bucket_destroy       = var.force_bucket_destroy
 }
 
 module "dr_cluster" {
@@ -18,6 +19,7 @@ module "dr_cluster" {
   vault_ent_license          = var.vault_ent_license
   subnet_second_octet        = "1"
   enable_deletion_protection = false
+  force_bucket_destroy       = var.force_bucket_destroy
 }
 
 module "eu_cluster" {
@@ -29,6 +31,7 @@ module "eu_cluster" {
   vault_ent_license          = var.vault_ent_license
   subnet_second_octet        = "2"
   enable_deletion_protection = false
+  force_bucket_destroy       = var.force_bucket_destroy
 }
 
 module "eu_dr_cluster" {
@@ -40,6 +43,7 @@ module "eu_dr_cluster" {
   vault_ent_license          = var.vault_ent_license
   subnet_second_octet        = "4"
   enable_deletion_protection = false
+  force_bucket_destroy       = var.force_bucket_destroy
 }
 
 module "ap_cluster" {
@@ -51,4 +55,5 @@ module "ap_cluster" {
   vault_ent_license          = var.vault_ent_license
   subnet_second_octet        = "4"
   enable_deletion_protection = false
+  force_bucket_destroy       = var.force_bucket_destroy
 }
