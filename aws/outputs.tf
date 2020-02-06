@@ -3,11 +3,11 @@ output "Project_Name" {
 }
 
 output "Connect_to_Bastion" {
-  value = length(aws_instance.bastion) > 0 ? "ssh -i ${var.ssh_key_name}.pem ubuntu@${aws_instance.bastion[0].public_ip}" : "No bastion created"
+  value = length(aws_instance.bastion) > 0 ? "ssh -i ${var.bastion_ssh_key_name}.pem ubuntu@${aws_instance.bastion[0].public_ip}" : "No bastion created"
 }
 
 output "Jump_through_Bastion" {
-  value = length(aws_instance.bastion) > 0 ?"ssh -i ${var.ssh_key_name}.pem -L 8200:${aws_lb.vault.dns_name}:8200 ubuntu@${aws_instance.bastion[0].public_ip}" : "No bastion created"
+  value = length(aws_instance.bastion) > 0 ?"ssh -i ${var.bastion_ssh_key_name}.pem -L 8200:${aws_lb.vault.dns_name}:8200 ubuntu@${aws_instance.bastion[0].public_ip}" : "No bastion created"
 }
 
 output "bastion_vpc_id" {
@@ -32,4 +32,8 @@ output "public_subnets" {
 
 output "route_table" {
   value = module.vpc.public_route_table_ids[0]
+}
+
+output "vault_load_balancer" {
+  value = aws_lb.vault.dns_name
 }

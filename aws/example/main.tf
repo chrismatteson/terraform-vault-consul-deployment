@@ -44,6 +44,22 @@ provider "aws" {
   region = var.region9
 }
 
+resource "tls_private_key" "ssh" {
+  algorithm = "RSA"
+  rsa_bits  = "4096"
+}
+
+resource "local_file" "private_key" {
+  sensitive_content = tls_private_key.ssh.private_key_pem
+  filename          = "${path.module}/${random_id.project_tag.hex}-key.pem"
+  file_permission   = "0400"
+}
+
+resource "aws_key_pair" "key" {
+  key_name   = "${random_id.project_tag.hex}-key"
+  public_key = tls_private_key.ssh.public_key_openssh
+}
+
 module "primary_cluster" {
   source                     = "../"
   region                     = var.region1
@@ -54,6 +70,7 @@ module "primary_cluster" {
   subnet_second_octet        = "0"
   force_bucket_destroy       = true
   create_bastion             = true
+  bastion_ssh_key_name       = aws_key_pair.key.key_name
 }
 
 module "dr_cluster" {
@@ -82,8 +99,8 @@ module "eu_cluster" {
 
 resource "aws_vpc_peering_connection" "bastion_connectivity_dr" {
   provider    = aws.region4
-  peer_vpc_id = module.primary_cluster.bastion_vpc_id
-  vpc_id      = module.dr_cluster.vpc_id
+  vpc_id = module.primary_cluster.bastion_vpc_id
+  peer_vpc_id      = module.dr_cluster.vpc_id
   auto_accept = false
   peer_region = var.region1
 }

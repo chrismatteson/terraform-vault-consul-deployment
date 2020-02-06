@@ -1,6 +1,7 @@
 variable "region" { default = "us-east-1" }
 variable "prefix" { default = "" }
-variable "ssh_key_name" { default = "" }
+variable "bastion_ssh_key_name" { default = "" }
+variable "consul_vault_ssh_key_name" { default = "" }
 variable "consul_cluster_size" { default = 5 }
 variable "vault_cluster_size" { default = 3 }
 variable "ami_id" { default = "" }

@@ -4,16 +4,6 @@ resource "random_id" "project_tag" {
   byte_length = 4
 }
 
-resource "tls_private_key" "ssh" {
-  algorithm   = "RSA"
-  rsa_bits = "4096"
-}
-
-resource "aws_key_pair" "key" {
-  key_name   = "${random_id.project_tag.hex}-key"
-  public_key = tls_private_key.ssh.public_key_openssh
-}
-
 # Lookup most recent AMI
 data "aws_ami" "latest-flask-image" {
   most_recent = true
@@ -31,7 +21,7 @@ data "aws_ami" "latest-flask-image" {
 }
 
 resource "aws_vpc" "flask-vpc" {
-  cidr_block = "172.16.0.0/16"
+  cidr_block = "192.168.0.0/16"
 }
 
 resource "aws_internet_gateway" "flask-gw" {
@@ -55,7 +45,7 @@ data "aws_availability_zones" "available" {
 resource "aws_subnet" "subnet1" {
   vpc_id                  = aws_vpc.flask-vpc.id
   availability_zone       = data.aws_availability_zones.available.names[0]
-  cidr_block              = "172.16.1.0/24"
+  cidr_block              = "192.168.1.0/24"
   map_public_ip_on_launch = true
 
   tags = merge(
@@ -69,7 +59,7 @@ resource "aws_subnet" "subnet1" {
 resource "aws_subnet" "subnet2" {
   vpc_id                  = aws_vpc.flask-vpc.id
   availability_zone       = data.aws_availability_zones.available.names[1]
-  cidr_block              = "172.16.2.0/24"
+  cidr_block              = "192.168.2.0/24"
   map_public_ip_on_launch = true
 
   tags = merge(
@@ -100,10 +90,10 @@ resource "aws_default_security_group" "flask-vpc_default" {
 
 
 resource "aws_instance" "web" {
-  ami           = data.aws_ami.latest-flask-image.id
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.subnet1.id
-  key_name      = aws_key_pair.key.key_name
+  ami                  = data.aws_ami.latest-flask-image.id
+  instance_type        = "t2.micro"
+  subnet_id            = aws_subnet.subnet1.id
+  key_name             = aws_key_pair.key.key_name
   iam_instance_profile = aws_iam_instance_profile.flask-instance_profile.id
 
   user_data = <<EOF
@@ -216,7 +206,6 @@ resource "aws_db_instance" "database" {
 }
 
 resource "aws_vpc_peering_connection" "bastion_flask_connectivity" {
-  provider    = aws.region1
   peer_vpc_id = module.primary_cluster.bastion_vpc_id
   vpc_id      = aws_vpc.flask-vpc.id
   auto_accept = true
@@ -245,12 +234,12 @@ resource "aws_route" "flask_bastion" {
   count                     = length(module.primary_cluster.bastion_public_subnets)
   route_table_id            = aws_default_route_table.flask-table.id
   destination_cidr_block    = element(module.primary_cluster.bastion_public_subnets, count.index)
-  vpc_peering_connection_id = aws_vpc_peering_connection.vault_flask_connectivity.id
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_flask_connectivity.id
 }
 
 resource "aws_route" "bastion_flask" {
   count                     = length([aws_subnet.subnet1.cidr_block, aws_subnet.subnet2.cidr_block])
   route_table_id            = module.primary_cluster.bastion_route_table
   destination_cidr_block    = element([aws_subnet.subnet1.cidr_block, aws_subnet.subnet2.cidr_block], count.index)
-  vpc_peering_connection_id = aws_vpc_peering_connection.vault_flask_connectivity.id
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_flask_connectivity.id
 }

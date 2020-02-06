@@ -70,7 +70,7 @@ resource "aws_instance" "bastion" {
   ami           = data.aws_ami.latest-image.id
   instance_type = "t2.micro"
   subnet_id     = module.bastion_vpc.public_subnets[0]
-  key_name      = var.ssh_key_name
+  key_name      = var.bastion_ssh_key_name
 
   tags = local.tags
 }
@@ -411,7 +411,7 @@ module "consul" {
   instance_type     = "t2.small"
   #  vpc_id                      = module.vpc.vpc_id
   vpc_zone_identifier = module.vpc.public_subnets
-  key_name            = var.ssh_key_name
+  key_name            = var.consul_vault_ssh_key_name
   #  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
   #  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
   enabled_metrics      = ["GroupTotalInstances"]
@@ -540,7 +540,7 @@ module "vault" {
   target_group_arns = [aws_lb_target_group.vault.arn]
   #  vpc_id                      = module.vpc.vpc_id
   vpc_zone_identifier = module.vpc.public_subnets
-  key_name            = var.ssh_key_name
+  key_name            = var.consul_vault_ssh_key_name
   #  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
   #  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
   enabled_metrics      = ["GroupTotalInstances"]
