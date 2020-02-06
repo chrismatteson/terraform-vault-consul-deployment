@@ -28,6 +28,10 @@ In order to set up the policies for, and the Database Secret Engine itself, see 
 ## Database Encryption - Transit Secrets Engine
 Reference: [Transit Secrets Engine](https://www.vaultproject.io/docs/secrets/transit/index.html)
 
+Prior to the Vault Enterprise implementation, ACME Corporation's website and ERP application wrote unencrypted data to the same database. This meant that all data, including EU data would reside in plaintext. The [Transit Secrets Engine](https://www.vaultproject.io/docs/secrets/transit/index.html) is used to use a Vault-managed key to encrypt and decrypt data without persisting it into Vault, but rather persisting it to the database, and decrypting it using Vault when the data is needed again.
+
+See [use-cases/transit-secrets-engine](use-cases/transit-secrets-engine) for the fixtures and scripts used to set up the Transit Secrets Engine.
+
 ## EU Data Protection - Mount Filters
 Reference: [Mount Filters](https://www.vaultproject.io/guides/operations/mount-filter/)
 
