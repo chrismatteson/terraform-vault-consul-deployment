@@ -21,3 +21,7 @@ output "Jump_through_Bastion_EU" {
 output "Flask_app" {
   value = "http://${aws_instance.web.public_ip}:8000"
 }
+
+output "Flask_app_id" {
+  value = i-045abd04ef23565e6
+}
