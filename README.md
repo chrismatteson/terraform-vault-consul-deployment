@@ -21,6 +21,10 @@ Prior to the Vault Enterprise implementation, ACME Corporation's website and ERP
 
 Use of Vault's Database Secrets Engine allows for the ERP and Website application to request dynamic database credentials from Vault with the help of [Vault Agent](https://www.vaultproject.io/docs/agent/): the agent performs [auto-auth](https://www.vaultproject.io/docs/agent/autoauth/) to the primary Vault cluster using the [EC2 Authentication Method](https://www.vaultproject.io/docs/auth/aws/) using an instance-id-bound-role (see fixtures and scripts in [use-cases/auth-methods/ec2](use-cases/auth-methods/ec2)). Then, a template declaration in the Vault Agent configuration references the secret path for the MySQL Database Secrets Engine. Vault Agent will request this secret from Vault, causing Vault to create a temporary user and password for MySQL for the length of the lease's period, revoking it once the lease has expired.
 
+See the [use-cases/vault-agent](use-cases/vault-agent) fixtures and scripts to see how Vault Agent is set up.
+
+In order to set up the policies for, and the Database Secret Engine itself, see the [use-cases/database-secrets-engine](use-cases/database-secrets-engine) fixtures and scripts.
+
 ## Database Encryption - Transit Secrets Engine
 Reference: [Transit Secrets Engine](https://www.vaultproject.io/docs/secrets/transit/index.html)
 
