@@ -48,3 +48,7 @@ terraform apply -var-file=stable.tfvars
 ## Accessing Provisioned Consul and Vault Instances
 
 The provisioned EC2 Instances are pre-configured with the [AWS Systems Manager Agent (SSM Agent)](https://docs.aws.amazon.com/systems-manager/latest/userguide/ssm-agent.html), and thus a secure shell can be accessed without using an SSH keypair, from the [SSM managed instances console](https://console.aws.amazon.com/systems-manager/managed-instances).
+
+## Auto-Unseal
+
+This implementation uses [AWS KMS Auto-Unseal Mechanism](https://www.vaultproject.io/docs/configuration/seal/awskms/) to encrypt the master key and auto-unseal the underlying storage. When initializing a cluster, use the script located in [use-cases/auto-unseal/](use-cases/auto-unseal/).
