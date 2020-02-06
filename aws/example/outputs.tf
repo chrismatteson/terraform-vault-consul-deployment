@@ -23,5 +23,5 @@ output "Flask_app" {
 }
 
 output "Flask_app_id" {
-  value = i-045abd04ef23565e6
+  value = aws_instance.web.id
 }
