@@ -481,7 +481,7 @@ Group=$user
 ExecStart=$exec_string
 ExecReload=$bin_dir/$service reload
 KillMode=process
-Restart=on-failure
+Restart=always
 LimitNOFILE=65536
 EOF
 )
