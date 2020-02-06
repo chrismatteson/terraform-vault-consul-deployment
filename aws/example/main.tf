@@ -80,31 +80,6 @@ module "eu_cluster" {
   create_bastion             = false
 }
 
-module "eu_dr_cluster" {
-  source                     = "../"
-  region                     = var.region8
-  consul_cluster_size        = 1
-  vault_cluster_size         = 1
-  consul_ent_license         = var.consul_ent_license
-  enable_deletion_protection = false
-  subnet_second_octet        = "2"
-  force_bucket_destroy       = true
-  create_bastion             = false
-}
-
-module "ap_cluster" {
-  source                     = "../"
-  region                     = var.region9
-  consul_cluster_size        = 1
-  vault_cluster_size         = 1
-  consul_ent_license         = var.consul_ent_license
-  enable_deletion_protection = false
-  subnet_second_octet        = "2"
-  force_bucket_destroy       = true
-  create_bastion             = false
-}
-
-
 resource "aws_vpc_peering_connection" "bastion_connectivity_dr" {
   provider    = aws.region4
   peer_vpc_id = module.primary_cluster.bastion_vpc_id
