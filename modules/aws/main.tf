@@ -538,11 +538,8 @@ module "vault" {
   desired_capacity  = var.vault_cluster_size
   instance_type     = "t2.small"
   target_group_arns = [aws_lb_target_group.vault.arn]
-  #  vpc_id                      = module.vpc.vpc_id
   vpc_zone_identifier = module.vpc.public_subnets
-  key_name            = var.ssh_key_name
-  #  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
-  #  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
+  security_groups      = [aws_security_group.vault-sg.id, module.vpc.default_security_group_id]
   enabled_metrics      = ["GroupTotalInstances"]
   iam_instance_profile = aws_iam_instance_profile.instance_profile.name
   tags = [
@@ -556,11 +553,49 @@ module "vault" {
   user_data = module.compress_vault.userdata
 }
 
+resource "aws_security_group" "vault-sg" {
+  name    = "${random_id.project_name.hex}-vault-sg"
+  vpc_id  = module.vpc.vpc_id
+
+  ingress {
+    from_port       = 8200
+    to_port         = 8200
+    protocol        = "TCP"
+    security_groups = [aws_security_group.vault-lb-sg.id]
+  }
+
+  egress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "vault-lb-sg" {
+  name    = "${random_id.project_name.hex}-vault-lb-sg"
+  vpc_id  = module.vpc.vpc_id
+  ingress {
+    from_port       = 8200
+    to_port         = 8200
+    protocol        = "TCP"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+}
+
 resource "aws_lb" "vault" {
   name               = "${random_id.project_name.hex}-vault-lb"
   internal           = false
   load_balancer_type = "application"
   subnets            = module.vpc.public_subnets
+  security_groups    = [aws_security_group.vault-lb-sg.id]
 
   enable_deletion_protection = var.enable_deletion_protection
 
