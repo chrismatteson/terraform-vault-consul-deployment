@@ -71,11 +71,14 @@ module "primary_cluster" {
   force_bucket_destroy       = true
   create_bastion             = true
   bastion_ssh_key_name       = aws_key_pair.key.key_name
+  providers = {
+    aws = aws.region1
+  }
 }
 
 module "dr_cluster" {
   source                     = "../"
-  region                     = var.region4
+  region                     = var.region2
   consul_cluster_size        = 1
   vault_cluster_size         = 1
   consul_ent_license         = var.consul_ent_license
@@ -83,6 +86,9 @@ module "dr_cluster" {
   subnet_second_octet        = "1"
   force_bucket_destroy       = true
   create_bastion             = false
+  providers = {
+    aws = aws.region2
+  }
 }
 
 module "eu_cluster" {
@@ -95,12 +101,15 @@ module "eu_cluster" {
   subnet_second_octet        = "2"
   force_bucket_destroy       = true
   create_bastion             = false
+  providers = {
+    aws = aws.region7
+  }
 }
 
 resource "aws_vpc_peering_connection" "bastion_connectivity_dr" {
-  provider    = aws.region4
-  vpc_id = module.primary_cluster.bastion_vpc_id
-  peer_vpc_id      = module.dr_cluster.vpc_id
+  provider    = aws.region2
+  peer_vpc_id      = module.primary_cluster.bastion_vpc_id
+  vpc_id = module.dr_cluster.vpc_id
   auto_accept = false
   peer_region = var.region1
 }
@@ -126,7 +135,7 @@ resource "aws_vpc_peering_connection_accepter" "bastion_connectivity_eu" {
 }
 
 resource "aws_vpc_peering_connection" "vault_connectivity_dr" {
-  provider    = aws.region4
+  provider    = aws.region2
   peer_vpc_id = module.primary_cluster.vpc_id
   vpc_id      = module.dr_cluster.vpc_id
   auto_accept = false
@@ -140,7 +149,7 @@ resource "aws_vpc_peering_connection_accepter" "vault_connectivity_dr" {
 }
 
 resource "aws_vpc_peering_connection" "vault_connectivity_eu" {
-  provider    = aws.region4
+  provider    = aws.region7
   peer_vpc_id = module.primary_cluster.vpc_id
   vpc_id      = module.eu_cluster.vpc_id
   auto_accept = false
@@ -170,7 +179,7 @@ resource "aws_route" "bastion_vpc_eu" {
 }
 
 resource "aws_route" "vpc_bastion_dr" {
-  provider                  = aws.region4
+  provider                  = aws.region2
   count                     = length(module.primary_cluster.bastion_public_subnets)
   route_table_id            = module.dr_cluster.route_table
   destination_cidr_block    = element(module.primary_cluster.bastion_public_subnets, count.index)
@@ -202,7 +211,7 @@ resource "aws_route" "vault_vpc_eu" {
 }
 
 resource "aws_route" "vpc_vault_dr" {
-  provider                  = aws.region4
+  provider                  = aws.region2
   count                     = length(module.primary_cluster.public_subnets)
   route_table_id            = module.dr_cluster.route_table
   destination_cidr_block    = element(module.primary_cluster.public_subnets, count.index)

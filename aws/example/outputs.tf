@@ -11,11 +11,11 @@ output "Jump_through_Bastion_Primary" {
 }
 
 output "Jump_through_Bastion_DR" {
-  value = "ssh -i ${aws_key_pair.key.key_name}.pem -L 8200:${module.dr_cluster.vault_load_balancer}:8200 ubuntu@52.54.200.176"
+  value = "ssh -i ${aws_key_pair.key.key_name}.pem -L 8200:${module.dr_cluster.vault_load_balancer}:8200 ubuntu@${module.primary_cluster.bastion_ip}"
 }
 
 output "Jump_through_Bastion_EU" {
-  value = "ssh -i ${aws_key_pair.key.key_name}.pem -L 8200:${module.eu_cluster.vault_load_balancer}:8200 ubuntu@52.54.200.176"
+  value = "ssh -i ${aws_key_pair.key.key_name}.pem -L 8200:${module.eu_cluster.vault_load_balancer}:8200 ubuntu@${module.primary_cluster.bastion_ip}"
 }
 
 output "Flask_app" {

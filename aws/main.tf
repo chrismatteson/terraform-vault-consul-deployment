@@ -1,7 +1,3 @@
-provider "aws" {
-  region = var.region
-}
-
 resource "random_id" "project_name" {
   byte_length = 4
 }
@@ -103,6 +99,7 @@ module "vpc" {
 }
 
 resource "aws_default_security_group" "vpc_default" {
+  count = var.create_bastion ? 1 : 0
   vpc_id = module.vpc.vpc_id
 
   ingress {
