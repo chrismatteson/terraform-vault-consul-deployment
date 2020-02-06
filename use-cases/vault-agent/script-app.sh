@@ -9,7 +9,7 @@ cp /tmp/vault/vault /usr/local/bin/vault
 chmod +x /usr/local/bin/vault
 
 
-cat << EOF > /opt/flask/mysqlcreds.json.ctmpl
+cat << EOF > /opt/flask/mysqldbcreds.json.ctmpl
 {{ with secret "mysql/creds/readonly" }}
 {
   "username": "{{ .Data.username }}",
@@ -47,8 +47,8 @@ listener "tcp" {
 }
 
 template {
-  source      = "/opt/flask/mysqlcreds.json.ctmpl"
-  destination = "/opt/flask/mysqlcreds.json"
+  source      = "/opt/flask/mysqldbcreds.json.ctmpl"
+  destination = "/opt/flask/mysqldbcreds.json"
 }
 EOF
 
