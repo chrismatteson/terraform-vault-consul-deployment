@@ -1,7 +1,5 @@
-variable "region" { default = "us-east-1" }
 variable "prefix" { default = "" }
-variable "bastion_ssh_key_name" { default = "" }
-variable "consul_vault_ssh_key_name" { default = "" }
+variable "ssh_key_name" { default = "" }
 variable "consul_cluster_size" { default = 5 }
 variable "vault_cluster_size" { default = 3 }
 variable "ami_id" { default = "" }
@@ -18,7 +16,8 @@ variable "ami_filter_name" {
 variable "vpc_id" { default = "" }
 variable "subnet_ids" { default = "" }
 variable "consul_ent_license" { default = "" }
-variable "vault_ent_license" { default = "" }
+# This is not implimented yet
+#variable "vault_ent_license" { default = "" }
 variable "consul_version" {
   default = "1.6.3"
 }
