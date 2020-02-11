@@ -1,4 +1,6 @@
-# Example to deploy 5 environments
+# Example to deploy 3 environments with transit gateway
+# The resource for transit gateway peering doesn't yet exist. So this requires
+# creating the transit gateway peers manually
 
 provider "aws" {
   alias  = "region1"
