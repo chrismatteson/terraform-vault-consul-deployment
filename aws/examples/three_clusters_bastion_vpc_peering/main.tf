@@ -238,9 +238,16 @@ resource "aws_vpc_peering_connection_accepter" "vault_connectivity_eu" {
   auto_accept               = true
 }
 
-resource "aws_security_group" "primary_cluster" {
+resource "aws_default_security_group" "primary_cluster" {
   provider = aws.region1
   vpc_id   = module.primary_cluster.vpc_id
+
+  ingress {
+    protocol  = -1
+    self      = true
+    from_port = 0
+    to_port   = 0
+  }
 
   ingress {
     from_port   = 22
@@ -269,13 +276,28 @@ resource "aws_security_group" "primary_cluster" {
     protocol    = "tcp"
     cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
 }
 
-resource "aws_security_group" "dr_cluster" {
+resource "aws_default_security_group" "dr_cluster" {
   provider = aws.region2
   vpc_id   = module.dr_cluster.vpc_id
 
   ingress {
+    protocol  = -1
+    self      = true
+    from_port = 0
+    to_port   = 0
+  }
+
+  ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -302,13 +324,27 @@ resource "aws_security_group" "dr_cluster" {
     protocol    = "tcp"
     cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
+
+    egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
-resource "aws_security_group" "eu_cluster" {
+resource "aws_default_security_group" "eu_cluster" {
   provider = aws.region3
   vpc_id   = module.eu_cluster.vpc_id
 
   ingress {
+    protocol  = -1
+    self      = true
+    from_port = 0
+    to_port   = 0
+  }
+
+  ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -334,6 +370,13 @@ resource "aws_security_group" "eu_cluster" {
     to_port     = 8500
     protocol    = "tcp"
     cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
