@@ -14,8 +14,8 @@ output "public_subnets_cidr_blocks" {
   value = module.vpc.public_subnets_cidr_blocks
 }
 
-output "route_table" {
-  value = module.vpc.default_route_table_id
+output "route_tables" {
+  value = module.vpc.public_route_table_ids
 }
 
 output "security_group_id" {
