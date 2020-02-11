@@ -13,3 +13,7 @@ output "public_subnets" {
 output "vault_load_balancer" {
   value = aws_lb.vault.dns_name
 }
+
+output "bastion_ip" {
+  value = length(aws_instance.bastion) > 0 ? aws_instance.bastion[0].public_ip : "No bastion host created"
+}
