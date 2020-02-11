@@ -219,150 +219,165 @@ resource "aws_vpc_peering_connection" "vault_connectivity_eu" {
   peer_region = var.region1
 }
 
-
-resource "aws_default_security_group" "primary_cluster" {
+resource "aws_security_group" "primary_cluster" {
   provider = aws.region1
-  vpc_id = module.primary_cluster.vpc_id
+  vpc_id   = module.primary_cluster.vpc_id
 
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = -1
-    self      = true
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8200
+    to_port     = 8200
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8200
-    to_port         = 8200
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8201
+    to_port     = 8201
+    protocol    = "tcp"
+    cidr_blocks = concat(module.dr_cluster.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks)
   }
 
   ingress {
-    from_port       = 8500
-    to_port         = 8500
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 8500
+    to_port     = 8500
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 }
 
-# This needs to be a seperate security group to avoid a loop
-resource "aws_security_group" "allow_replication_to_primary" {
-  provider = aws.region1
-  vpc_id      = module.primary_cluster.vpc_id
-
-  ingress {
-    from_port       = 8201
-    to_port         = 8201
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.dr_cluster.id, aws_default_security_group.eu_cluster.id]
-  }
-}
-
-resource "aws_default_security_group" "dr_cluster" {
+resource "aws_security_group" "dr_cluster" {
   provider = aws.region2
-  vpc_id = module.dr_cluster.vpc_id
+  vpc_id   = module.dr_cluster.vpc_id
 
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = -1
-    self      = true
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8200
+    to_port     = 8200
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8200
-    to_port         = 8200
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8201
+    to_port     = 8201
+    protocol    = "tcp"
+    cidr_blocks = module.primary_cluster.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8201
-    to_port         = 8201
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.primary_cluster.id]
-  }
-
-  ingress {
-    from_port       = 8500
-    to_port         = 8500
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 8500
+    to_port     = 8500
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 }
 
-resource "aws_default_security_group" "eu_cluster" {
+resource "aws_security_group" "eu_cluster" {
   provider = aws.region3
-  vpc_id = module.eu_cluster.vpc_id
+  vpc_id   = module.eu_cluster.vpc_id
 
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = -1
-    self      = true
-  }
-
-  ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8200
-    to_port         = 8200
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8200
+    to_port     = 8200
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8201
-    to_port         = 8201
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.primary_cluster.id]
+    from_port   = 8201
+    to_port     = 8201
+    protocol    = "tcp"
+    cidr_blocks = module.primary_cluster.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8500
-    to_port         = 8500
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8500
+    to_port     = 8500
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
+}
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+resource "aws_route" "bastion_vpc_dr" {
+  provider                  = aws.region1
+  count                     = length(module.dr_cluster.public_subnets_cidr_blocks)
+  route_table_id            = module.bastion_vpc.default_route_table_id
+  destination_cidr_block    = element(module.dr_cluster.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_dr.id
+}
+
+resource "aws_route" "bastion_vpc_eu" {
+  provider                  = aws.region1
+  count                     = length(module.eu_cluster.public_subnets_cidr_blocks)
+  route_table_id            = module.bastion_vpc.default_route_table_id
+  destination_cidr_block    = element(module.eu_cluster.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_eu.id
+}
+
+resource "aws_route" "vpc_bastion_dr" {
+  provider                  = aws.region2
+  count                     = length(module.bastion_vpc.public_subnets_cidr_blocks)
+  route_table_id            = module.dr_cluster.route_table
+  destination_cidr_block    = element(module.bastion_vpc.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_dr.id
+}
+
+resource "aws_route" "vpc_bastion_eu" {
+  provider                  = aws.region3
+  count                     = length(module.bastion_vpc.public_subnets_cidr_blocks)
+  route_table_id            = module.eu_cluster.route_table
+  destination_cidr_block    = element(module.bastion_vpc.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.bastion_connectivity_eu.id
+}
+
+resource "aws_route" "vault_vpc_dr" {
+  provider                  = aws.region1
+  count                     = length(module.dr_cluster.public_subnets_cidr_blocks)
+  route_table_id            = module.primary_cluster.route_table
+  destination_cidr_block    = element(module.dr_cluster.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_dr.id
+}
+
+resource "aws_route" "vault_vpc_eu" {
+  provider                  = aws.region1
+  count                     = length(module.eu_cluster.public_subnets_cidr_blocks)
+  route_table_id            = module.primary_cluster.route_table
+  destination_cidr_block    = element(module.eu_cluster.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_eu.id
+}
+
+resource "aws_route" "vpc_vault_dr" {
+  provider                  = aws.region2
+  count                     = length(module.primary_cluster.public_subnets_cidr_blocks)
+  route_table_id            = module.dr_cluster.route_table
+  destination_cidr_block    = element(module.primary_cluster.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_dr.id
+}
+
+resource "aws_route" "vpc_vault_eu" {
+  provider                  = aws.region3
+  count                     = length(module.primary_cluster.public_subnets_cidr_blocks)
+  route_table_id            = module.eu_cluster.route_table
+  destination_cidr_block    = element(module.primary_cluster.public_subnets_cidr_blocks, count.index)
+  vpc_peering_connection_id = aws_vpc_peering_connection.vault_connectivity_eu.id
 }

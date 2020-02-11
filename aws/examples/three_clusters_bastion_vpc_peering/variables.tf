@@ -6,7 +6,7 @@ variable "region1" {
   default = "us-east-1"
 }
 variable "region2" {
-  default = "us-west-2"
+  default = "us-east-2"
 }
 variable "region3" {
   default = "eu-central-1"
