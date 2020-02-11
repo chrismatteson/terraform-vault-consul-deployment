@@ -171,8 +171,8 @@ module "eu_cluster" {
 
 resource "aws_vpc_peering_connection" "bastion_connectivity_dr" {
   provider    = aws.region2
-  vpc_id      = module.bastion_vpc.vpc_id
-  peer_vpc_id = module.dr_cluster.vpc_id
+  peer_vpc_id      = module.bastion_vpc.vpc_id
+  vpc_id = module.dr_cluster.vpc_id
   auto_accept = false
   peer_region = var.region1
 }
