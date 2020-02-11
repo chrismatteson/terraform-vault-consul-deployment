@@ -238,48 +238,51 @@ data "aws_iam_policy_document" "auto_discover_cluster" {
   }
 }
 
-module "compress_consul" {
-  source   = "github.com/chrismatteson/terraform-compress-userdata"
-  filename = "userdata.sh"
-  shell    = "bash"
-  content = templatefile("${path.module}/install-consul.tpl",
-    {
-      consul_version                      = var.consul_version,
-      consul_download_url                 = var.consul_download_url,
-      consul_path                         = var.consul_path,
-      consul_user                         = var.consul_user,
-      ca_path                             = var.ca_path,
-      cert_file_path                      = var.cert_file_path,
-      key_file_path                       = var.key_file_path,
-      server                              = var.server,
-      client                              = var.client,
-      config_dir                          = var.config_dir,
-      data_dir                            = var.data_dir,
-      systemd_stdout                      = var.systemd_stdout,
-      systemd_stderr                      = var.systemd_stderr,
-      bin_dir                             = var.bin_dir,
-      cluster_tag_key                     = var.cluster_tag_key,
-      cluster_tag_value                   = "${random_id.project_name.hex}-${var.cluster_tag_value}",
-      datacenter                          = var.datacenter,
-      autopilot_cleanup_dead_servers      = var.autopilot_cleanup_dead_servers,
-      autopilot_last_contact_threshold    = var.autopilot_last_contact_threshold,
-      autopilot_max_trailing_logs         = var.autopilot_max_trailing_logs,
-      autopilot_server_stabilization_time = var.autopilot_server_stabilization_time,
-      autopilot_redundancy_zone_tag       = var.autopilot_redundancy_zone_tag,
-      autopilot_disable_upgrade_migration = var.autopilot_disable_upgrade_migration,
-      autopilot_upgrade_version_tag       = var.autopilot_upgrade_version_tag,
-      enable_gossip_encryption            = var.enable_gossip_encryption,
-      enable_rpc_encryption               = var.enable_rpc_encryption,
-      environment                         = var.environment,
-      recursor                            = var.recursor,
-      bucket                              = aws_s3_bucket.consul_setup.id,
-      bucketkms                           = aws_kms_key.bucketkms.id,
-      consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "",
-      enable_acls                         = var.enable_acls,
-      enable_consul_http_encryption       = var.enable_consul_http_encryption,
-      consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
-    },
-  )
+data "template_cloudinit_config" "consul" {
+  gzip         = true
+  base64_encode = true
+  part {
+    filename     = "install-consul.sh"
+    content_type = "text/x-shellscript"
+    content = templatefile("${path.module}/install-consul.tpl",
+      {
+        consul_version                      = var.consul_version,
+        consul_download_url                 = var.consul_download_url,
+        consul_path                         = var.consul_path,
+        consul_user                         = var.consul_user,
+        ca_path                             = var.ca_path,
+        cert_file_path                      = var.cert_file_path,
+        key_file_path                       = var.key_file_path,
+        server                              = var.server,
+        client                              = var.client,
+        config_dir                          = var.config_dir,
+        data_dir                            = var.data_dir,
+        systemd_stdout                      = var.systemd_stdout,
+        systemd_stderr                      = var.systemd_stderr,
+        bin_dir                             = var.bin_dir,
+        cluster_tag_key                     = var.cluster_tag_key,
+        cluster_tag_value                   = "${random_id.project_name.hex}-${var.cluster_tag_value}",
+        datacenter                          = var.datacenter,
+        autopilot_cleanup_dead_servers      = var.autopilot_cleanup_dead_servers,
+        autopilot_last_contact_threshold    = var.autopilot_last_contact_threshold,
+        autopilot_max_trailing_logs         = var.autopilot_max_trailing_logs,
+        autopilot_server_stabilization_time = var.autopilot_server_stabilization_time,
+        autopilot_redundancy_zone_tag       = var.autopilot_redundancy_zone_tag,
+        autopilot_disable_upgrade_migration = var.autopilot_disable_upgrade_migration,
+        autopilot_upgrade_version_tag       = var.autopilot_upgrade_version_tag,
+        enable_gossip_encryption            = var.enable_gossip_encryption,
+        enable_rpc_encryption               = var.enable_rpc_encryption,
+        environment                         = var.environment,
+        recursor                            = var.recursor,
+        bucket                              = aws_s3_bucket.consul_setup.id,
+        bucketkms                           = aws_kms_key.bucketkms.id,
+        consul_license_arn                  = var.consul_ent_license != "" ? module.lambda.arn : "",
+        enable_acls                         = var.enable_acls,
+        enable_consul_http_encryption       = var.enable_consul_http_encryption,
+        consul_backup_bucket                = aws_s3_bucket.consul_backups[0].id,
+      }
+    )
+  }
 }
 
 module "consul" {
@@ -292,11 +295,8 @@ module "consul" {
   min_size          = var.consul_cluster_size
   desired_capacity  = var.consul_cluster_size
   instance_type     = "t2.small"
-  #  vpc_id                      = module.vpc.vpc_id
   vpc_zone_identifier = module.vpc.public_subnets
   key_name            = var.ssh_key_name
-  #  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
-  #  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
   enabled_metrics      = ["GroupTotalInstances"]
   iam_instance_profile = aws_iam_instance_profile.instance_profile.name
   tags = concat(
@@ -316,7 +316,7 @@ module "consul" {
       }
     ]
   )
-  user_data = module.compress_consul.userdata
+  user_data = data.template_cloudinit_config.consul.rendered
 }
 
 resource "aws_iam_role_policy_attachment" "SystemsManager" {
@@ -339,12 +339,14 @@ resource "aws_iam_role_policy" "InvokeLambda" {
 }
 
 # Install Vault
-module "compress_vault" {
-  source   = "github.com/chrismatteson/terraform-compress-userdata"
-  filename = "userdata.sh"
-  shell    = "bash"
-  content = templatefile("${path.module}/install-vault.tpl",
-    {
+data "template_cloudinit_config" "vault" {
+  gzip         = true
+  base64_encode = true
+  part {
+    filename     = "install-vault.sh"
+    content_type = "text/x-shellscript"
+    content = templatefile("${path.module}/install-vault.tpl",
+      {
       consul_version                = var.consul_version,
       consul_download_url           = var.consul_download_url,
       vault_version                 = var.vault_version,
@@ -377,8 +379,9 @@ module "compress_vault" {
       enable_consul_http_encryption = var.enable_consul_http_encryption,
       consul_backup_bucket          = aws_s3_bucket.consul_backups[0].id,
       kms_key                       = aws_kms_key.vault.id
-    },
-  )
+      }
+    )
+  }
 }
 
 resource "aws_kms_key" "vault" {
@@ -421,11 +424,8 @@ module "vault" {
   desired_capacity  = var.vault_cluster_size
   instance_type     = "t2.small"
   target_group_arns = [aws_lb_target_group.vault.arn]
-  #  vpc_id                      = module.vpc.vpc_id
   vpc_zone_identifier = module.vpc.public_subnets
   key_name            = var.ssh_key_name
-  #  allowed_inbound_cidr_blocks = ["0.0.0.0/0"]
-  #  allowed_ssh_cidr_blocks     = ["0.0.0.0/0"]
   enabled_metrics      = ["GroupTotalInstances"]
   iam_instance_profile = aws_iam_instance_profile.instance_profile.name
   tags = [
@@ -436,7 +436,7 @@ module "vault" {
       propagate_at_launch : true
     }
   ]
-  user_data = module.compress_vault.userdata
+  user_data = data.template_cloudinit_config.vault.rendered
 }
 
 resource "aws_lb" "vault" {

@@ -129,6 +129,8 @@ resource "aws_instance" "bastion" {
 
 module "primary_cluster" {
   source                     = "../../"
+  consul_version             = "1.6.3+ent"
+  vault_version              = "1.3.2+ent"
   consul_cluster_size        = 6
   vault_cluster_size         = 3
   consul_ent_license         = var.consul_ent_license
@@ -226,16 +228,9 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "eu_cluster" {
   tags = local.tags
 }
 
-resource "aws_default_security_group" "primary_cluster" {
+resource "aws_security_group" "primary_cluster" {
   provider = aws.region1
   vpc_id   = module.primary_cluster.vpc_id
-
-  ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = -1
-    self      = true
-  }
 
   ingress {
     from_port   = 22
@@ -252,123 +247,82 @@ resource "aws_default_security_group" "primary_cluster" {
   }
 
   ingress {
+    from_port   = 8201
+    to_port     = 8201
+    protocol    = "tcp"
+    cidr_blocks = concat(module.dr_cluster.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks)
+  }
+
+  ingress {
     from_port   = 8500
     to_port     = 8500
     protocol    = "tcp"
     cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 }
 
-# This needs to be a seperate security group to avoid a loop
-resource "aws_security_group" "allow_replication_to_primary" {
-  provider = aws.region1
-  vpc_id   = module.primary_cluster.vpc_id
-
-  ingress {
-    from_port       = 8201
-    to_port         = 8201
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.dr_cluster.id, aws_default_security_group.eu_cluster.id]
-  }
-}
-
-resource "aws_default_security_group" "dr_cluster" {
+resource "aws_security_group" "dr_cluster" {
   provider = aws.region2
   vpc_id   = module.dr_cluster.vpc_id
 
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = -1
-    self      = true
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8200
+    to_port     = 8200
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8200
-    to_port         = 8200
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8201
+    to_port     = 8201
+    protocol    = "tcp"
+    cidr_blocks = module.primary_cluster.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8201
-    to_port         = 8201
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.primary_cluster.id]
-  }
-
-  ingress {
-    from_port       = 8500
-    to_port         = 8500
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 8500
+    to_port     = 8500
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 }
 
-resource "aws_default_security_group" "eu_cluster" {
+resource "aws_security_group" "eu_cluster" {
   provider = aws.region3
   vpc_id   = module.eu_cluster.vpc_id
 
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = -1
-    self      = true
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8200
+    to_port     = 8200
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8200
-    to_port         = 8200
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
+    from_port   = 8201
+    to_port     = 8201
+    protocol    = "tcp"
+    cidr_blocks = module.primary_cluster.public_subnets_cidr_blocks
   }
 
   ingress {
-    from_port       = 8201
-    to_port         = 8201
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.primary_cluster.id]
-  }
-
-  ingress {
-    from_port       = 8500
-    to_port         = 8500
-    protocol        = "tcp"
-    security_groups = [aws_default_security_group.bastion_default.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 8500
+    to_port     = 8500
+    protocol    = "tcp"
+    cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 }
