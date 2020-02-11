@@ -175,6 +175,13 @@ module "eu_cluster" {
   }
 }
 
+resource "aws_vpc_peering_connection" "bastion_connectivity" {
+  provider    = aws.region1
+  peer_vpc_id = module.bastion_vpc.vpc_id
+  vpc_id      = module.primary_cluster.vpc_id
+  auto_accept = true
+}
+
 resource "aws_vpc_peering_connection" "bastion_connectivity_dr" {
   provider    = aws.region2
   peer_vpc_id = module.bastion_vpc.vpc_id
