@@ -42,7 +42,7 @@ resource "local_file" "private_key" {
 
 data "aws_availability_zones" "available" {
   provider = aws.region1
-  state = "available"
+  state    = "available"
 }
 
 module "bastion_vpc" {
@@ -77,7 +77,7 @@ module "bastion_vpc" {
 
 resource "aws_default_security_group" "bastion_default" {
   provider = aws.region1
-  vpc_id = module.bastion_vpc.vpc_id
+  vpc_id   = module.bastion_vpc.vpc_id
 
   ingress {
     from_port   = 22
@@ -95,14 +95,14 @@ resource "aws_default_security_group" "bastion_default" {
 }
 
 resource "aws_key_pair" "key" {
-  provider = aws.region1
+  provider   = aws.region1
   key_name   = "${random_id.project_tag.hex}-key"
   public_key = tls_private_key.ssh.public_key_openssh
 }
 
 # Lookup most recent AMI
 data "aws_ami" "latest-image" {
-  provider = aws.region1
+  provider    = aws.region1
   most_recent = true
   owners      = ["099720109477"]
 
@@ -118,7 +118,7 @@ data "aws_ami" "latest-image" {
 }
 
 resource "aws_instance" "bastion" {
-  provider = aws.region1
+  provider      = aws.region1
   ami           = data.aws_ami.latest-image.id
   instance_type = "t2.micro"
   subnet_id     = module.bastion_vpc.public_subnets[0]
@@ -129,13 +129,15 @@ resource "aws_instance" "bastion" {
 
 module "primary_cluster" {
   source                     = "../../"
+  consul_version             = "1.6.3+ent"
+  vault_version              = "1.3.2+ent"
   consul_cluster_size        = 6
   vault_cluster_size         = 3
   consul_ent_license         = var.consul_ent_license
   enable_deletion_protection = false
   subnet_second_octet        = "0"
   force_bucket_destroy       = true
-  tags = local.tags
+  tags                       = local.tags
   providers = {
     aws = aws.region1
   }
@@ -143,13 +145,15 @@ module "primary_cluster" {
 
 module "dr_cluster" {
   source                     = "../../"
+  consul_version             = "1.6.3+ent"
+  vault_version              = "1.3.2+ent"
   consul_cluster_size        = 1
   vault_cluster_size         = 1
   consul_ent_license         = var.consul_ent_license
   enable_deletion_protection = false
   subnet_second_octet        = "1"
   force_bucket_destroy       = true
-  tags = local.tags
+  tags                       = local.tags
   providers = {
     aws = aws.region2
   }
@@ -157,13 +161,15 @@ module "dr_cluster" {
 
 module "eu_cluster" {
   source                     = "../../"
+  consul_version             = "1.6.3+ent"
+  vault_version              = "1.3.2+ent"
   consul_cluster_size        = 1
   vault_cluster_size         = 1
   consul_ent_license         = var.consul_ent_license
   enable_deletion_protection = false
   subnet_second_octet        = "2"
   force_bucket_destroy       = true
-  tags = local.tags
+  tags                       = local.tags
   providers = {
     aws = aws.region3
   }
@@ -171,8 +177,8 @@ module "eu_cluster" {
 
 resource "aws_vpc_peering_connection" "bastion_connectivity_dr" {
   provider    = aws.region2
-  peer_vpc_id      = module.bastion_vpc.vpc_id
-  vpc_id = module.dr_cluster.vpc_id
+  peer_vpc_id = module.bastion_vpc.vpc_id
+  vpc_id      = module.dr_cluster.vpc_id
   auto_accept = false
   peer_region = var.region1
 }
