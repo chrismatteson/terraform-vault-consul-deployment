@@ -13,6 +13,11 @@ output "public_subnets" {
 output "public_subnets_cidr_blocks" {
   value = module.vpc.public_subnets_cidr_blocks
 }
+
+output "route_table" {
+  value = module.vpc.default_route_table_id
+}
+
 output "security_group_id" {
   value = module.vpc.default_security_group_id
 }

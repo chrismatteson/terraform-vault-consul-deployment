@@ -328,3 +328,35 @@ resource "aws_security_group" "eu_cluster" {
     cidr_blocks = module.bastion_vpc.public_subnets_cidr_blocks
   }
 }
+
+resource "aws_route" "bastion_out" {
+  provider                  = aws.region1
+  count                     = length(concat(module.primary_cluster.public_subnets_cidr_blocks, module.dr_cluster.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks))
+  route_table_id            = module.bastion_vpc.default_route_table_id
+  destination_cidr_block    = element(concat(module.primary_cluster.public_subnets_cidr_blocks, module.dr_cluster.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks), count.index)
+  transit_gateway_id        = aws_ec2_transit_gateway.primary_gateway.id 
+}
+
+resource "aws_route" "primary_out" {
+  provider                  = aws.region1
+  count                     = length(concat(module.bastion_vpc.public_subnets_cidr_blocks, module.dr_cluster.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks))
+  route_table_id            = module.primary_cluster.route_table
+  destination_cidr_block    = element(concat(module.bastion_vpc.public_subnets_cidr_blocks, module.dr_cluster.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks), count.index)
+  transit_gateway_id        = aws_ec2_transit_gateway.primary_gateway.id 
+}
+
+resource "aws_route" "dr_out" {
+  provider                  = aws.region2
+  count                     = length(concat(module.primary_cluster.public_subnets_cidr_blocks, module.bastion_vpc.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks))
+  route_table_id            = module.dr_cluster.route_table
+  destination_cidr_block    = element(concat(module.primary_cluster.public_subnets_cidr_blocks, module.bastion_vpc.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks), count.index)
+  transit_gateway_id        = aws_ec2_transit_gateway.dr_gateway.id 
+}
+
+resource "aws_route" "eu_out" {
+  provider                  = aws.region3
+  count                     = length(concat(module.primary_cluster.public_subnets_cidr_blocks, module.bastion_vpc.public_subnets_cidr_blocks, module.bastion_vpc.public_subnets_cidr_blocks))
+  route_table_id            = module.eu_cluster.route_table
+  destination_cidr_block    = element(concat(module.primary_cluster.public_subnets_cidr_blocks, module.bastion_vpc.public_subnets_cidr_blocks, module.bastion_vpc.public_subnets_cidr_blocks), count.index)
+  transit_gateway_id        = aws_ec2_transit_gateway.eu_gateway.id 
+}

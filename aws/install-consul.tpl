@@ -475,7 +475,6 @@ EOF
 
   local -r service_config=$(cat <<EOF
 [Service]
-Type=notify
 User=$user
 Group=$user
 ExecStart=$exec_string
@@ -486,6 +485,13 @@ LimitNOFILE=65536
 EOF
 )
 
+  if [[ $service == "consul" ]]; then
+  local -r service_extra_consul_config=$(cat <<EOF
+Type=notify
+EOF
+)
+fi
+
   local -r install_config=$(cat <<EOF
 [Install]
 WantedBy=multi-user.target
@@ -494,6 +500,7 @@ EOF
 
   echo -e "$unit_config" > "$systemd_config_path/$service.service"
   echo -e "$service_config" >> "$systemd_config_path/$service.service"
+  echo -e "$service_extra_consul_config" >> "$systemd_config_path/$service.service"
   echo -e "$install_config" >> "$systemd_config_path/$service.service"
 }
 
