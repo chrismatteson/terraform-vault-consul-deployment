@@ -458,8 +458,13 @@ resource "aws_lb_target_group" "vault" {
   protocol = "HTTP"
   vpc_id   = module.vpc.vpc_id
   health_check {
-    enabled = true
-    path    = "/ui/"
+    interval          = "5"
+    timeout           = "2"
+    path              = "/v1/sys/health"
+    port              = "8200"
+    protocol          = "HTTPS"
+    matcher           = "200,472,473"
+    healthy_threshold = 2
   }
 }
 
