@@ -264,7 +264,7 @@ resource "aws_default_security_group" "primary_cluster" {
   }
 
   ingress {
-    from_port   = 8201
+    from_port   = 8200
     to_port     = 8201
     protocol    = "tcp"
     cidr_blocks = concat(module.dr_cluster.public_subnets_cidr_blocks, module.eu_cluster.public_subnets_cidr_blocks)
@@ -312,7 +312,7 @@ resource "aws_default_security_group" "dr_cluster" {
   }
 
   ingress {
-    from_port   = 8201
+    from_port   = 8200
     to_port     = 8201
     protocol    = "tcp"
     cidr_blocks = module.primary_cluster.public_subnets_cidr_blocks
@@ -359,7 +359,7 @@ resource "aws_default_security_group" "eu_cluster" {
   }
 
   ingress {
-    from_port   = 8201
+    from_port   = 8200
     to_port     = 8201
     protocol    = "tcp"
     cidr_blocks = module.primary_cluster.public_subnets_cidr_blocks
