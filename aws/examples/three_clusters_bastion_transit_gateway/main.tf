@@ -31,7 +31,7 @@ locals {
   tags = merge(
     var.tags,
     {
-      "ProjectName" = random_id.project_tag.hex
+      "ProjectTag" = random_id.project_tag.hex
     },
   )
 }
