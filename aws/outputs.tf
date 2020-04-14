@@ -1,5 +1,5 @@
-output "Project_Name" {
-  value = random_id.project_name.hex
+output "Cluster_Name" {
+  value = random_id.cluster_name.hex
 }
 
 output "vpc_id" {

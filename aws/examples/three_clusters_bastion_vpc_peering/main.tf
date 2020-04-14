@@ -20,7 +20,7 @@ resource "tls_private_key" "ssh" {
   rsa_bits  = "4096"
 }
 
-resource "random_id" "project_tag" {
+resource "random_id" "deployment_tag" {
   byte_length = 4
 }
 
@@ -29,14 +29,14 @@ locals {
   tags = merge(
     var.tags,
     {
-      "ProjectTag" = random_id.project_tag.hex
+      "DeploymentTag" = random_id.deployment_tag.hex
     },
   )
 }
 
 resource "local_file" "private_key" {
   sensitive_content = tls_private_key.ssh.private_key_pem
-  filename          = "${path.module}/${random_id.project_tag.hex}-key.pem"
+  filename          = "${path.module}/${random_id.deployment_tag.hex}-key.pem"
   file_permission   = "0400"
 }
 
@@ -47,7 +47,7 @@ data "aws_availability_zones" "available" {
 
 module "bastion_vpc" {
   source = "terraform-aws-modules/vpc/aws"
-  name   = "${random_id.project_tag.hex}-bastion"
+  name   = "${random_id.deployment_tag.hex}-bastion"
 
   cidr = "192.168.0.0/16"
 
@@ -68,7 +68,8 @@ module "bastion_vpc" {
   tags = local.tags
 
   vpc_tags = {
-    Name = "${random_id.project_tag.hex}-vpc"
+    Name = "${random_id.deployment_tag.hex}-vpc"
+    Purpose = "bastion"
   }
   providers = {
     aws = aws.region1
@@ -96,7 +97,7 @@ resource "aws_default_security_group" "bastion_default" {
 
 resource "aws_key_pair" "key" {
   provider   = aws.region1
-  key_name   = "${random_id.project_tag.hex}-key"
+  key_name   = "${random_id.deployment_tag.hex}-key"
   public_key = tls_private_key.ssh.public_key_openssh
 }
 

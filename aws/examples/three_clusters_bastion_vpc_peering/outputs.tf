@@ -1,5 +1,5 @@
-output "Project_Tag" {
-  value = random_id.project_tag.hex
+output "Deployment_Tag" {
+  value = random_id.deployment_tag.hex
 }
 
 output "Connect_to_Bastion" {
