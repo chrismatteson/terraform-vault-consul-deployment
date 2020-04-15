@@ -26,8 +26,14 @@ module "vpc" {
   cidr = "10.${var.subnet_second_octet}.0.0/16"
 
   azs             = data.aws_availability_zones.available.names
-  private_subnets = ["10.${var.subnet_second_octet}.1.0/24", "10.${var.subnet_second_octet}.2.0/24", "10.${var.subnet_second_octet}.3.0/24"]
-  public_subnets  = ["10.${var.subnet_second_octet}.101.0/24", "10.${var.subnet_second_octet}.102.0/24", "10.${var.subnet_second_octet}.103.0/24"]
+  private_subnets = [
+    for num in range(0, length(data.aws_availability_zones.available.names)) :
+    cidrsubnet("10.${var.subnet_second_octet}.1.0/16", 8, 1 + num)
+  ]
+  public_subnets = [
+    for num in range(0, length(data.aws_availability_zones.available.names)) :
+    cidrsubnet("10.${var.subnet_second_octet}.101.0/16", 8, 101 + num)
+  ]
 
   enable_nat_gateway = true
   single_nat_gateway = true
