@@ -2,6 +2,26 @@ output "Deployment_Tag" {
   value = random_id.deployment_tag.hex
 }
 
+output "Bastion_DNS" {
+  value = aws_instance.bastion.public_dns
+}
+
+output "SSH_Key" {
+  value = aws_key_pair.key.key_name
+}
+
+output "Primary_Vault_Cluster_LB" {
+  value = module.primary_cluster.vault_load_balancer
+}
+
+output "DR_Vault_Cluster_LB" {
+  value = module.dr_cluster.vault_load_balancer
+}
+
+output "EU_Vault_Cluster_LB" {
+  value = module.eu_cluster.vault_load_balancer
+}
+
 output "Connect_to_Bastion" {
   value = "ssh -i ${aws_key_pair.key.key_name}.pem ubuntu@${aws_instance.bastion.public_ip}"
 }
