@@ -124,6 +124,16 @@ resource "aws_instance" "bastion" {
   instance_type = "t2.micro"
   subnet_id     = module.bastion_vpc.public_subnets[0]
   key_name      = aws_key_pair.key.key_name
+  user_data     = <<EOF
+#!/bin/bash
+
+sudo apt-get update -y
+sudo apt-get install -y unzip
+
+wget https://releases.hashicorp.com/vault/1.3.2+ent/vault_1.3.2+ent_linux_amd64.zip -O vault.zip
+unzip vault
+mv vault /usr/bin/vault
+EOF
 
   tags = local.tags
 }
