@@ -469,7 +469,7 @@ resource "aws_lb_target_group" "vault" {
     timeout           = "2"
     path              = "/v1/sys/health"
     port              = "8200"
-    protocol          = "HTTPS"
+    protocol          = "HTTP"
     matcher           = "200,472,473"
     healthy_threshold = 2
   }
