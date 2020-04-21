@@ -467,10 +467,10 @@ resource "aws_lb_target_group" "vault" {
   health_check {
     interval          = "5"
     timeout           = "2"
-    path              = "/v1/sys/health"
+    path              = "/v1/sys/seal-status"
     port              = "8200"
     protocol          = "HTTP"
-    matcher           = "200,472,473"
+    matcher           = "200,405"
     healthy_threshold = 2
   }
 }
