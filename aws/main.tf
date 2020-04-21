@@ -470,7 +470,7 @@ resource "aws_lb_target_group" "vault" {
     path              = "/v1/sys/health"
     port              = "8200"
     protocol          = "HTTP"
-    matcher           = "200,472,473"
+    matcher           = "200,472,473,501"
     healthy_threshold = 2
   }
 }
