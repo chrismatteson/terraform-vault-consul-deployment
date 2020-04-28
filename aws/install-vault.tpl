@@ -616,6 +616,15 @@ function install_license {
   fi
 }
 
+function install_certificates {
+  local -r bucket="$1"
+  local -r bucketkms="$2"
+  local -r certpath="$4"
+
+  aws s3 cp $bucket/*.pem $certpath/
+  echo "0 8 * * * aws s3 cp $bucket/*.pem $certpath/" >> /etc/crontab
+}
+
 function main {
   log_info "Starting Consul install"
   install_dependencies
@@ -686,6 +695,10 @@ function main {
   enable_acls ${bucket} ${bucketkms} $CONSUL_PATH
   %{ endif }
 
+  install_certificate ${bucket} \
+    ${bucketkms} \
+    "$OPENSSLFLAGS" \
+    "$VAULT_PATH/config/certs"
 
   generate_vault_config "$VAULT_PATH/config" \
     "$VAULT_USER" \

@@ -66,8 +66,8 @@ resource "aws_kms_key" "bucketkms" {
   tags = local.tags
 }
 
-resource "aws_s3_bucket" "consul_setup" {
-  bucket        = "${random_id.cluster_name.hex}-consul-setup"
+resource "aws_s3_bucket" "setup" {
+  bucket        = "${random_id.cluster_name.hex}-setup"
   acl           = "private"
   force_destroy = var.force_bucket_destroy
   lifecycle {
@@ -88,7 +88,7 @@ resource "aws_s3_bucket" "consul_backups" {
 }
 
 # Create IAM policy to allow Consul to reach S3 bucket and KMS key
-data "aws_iam_policy_document" "consul_bucket" {
+data "aws_iam_policy_document" "setup_bucket" {
   statement {
     effect = "Allow"
     actions = [
@@ -96,7 +96,7 @@ data "aws_iam_policy_document" "consul_bucket" {
       "s3:PutObject"
     ]
     resources = [
-      "${aws_s3_bucket.consul_setup.arn}/*"
+      "${aws_s3_bucket.setup.arn}/*"
     ]
   }
 
@@ -106,15 +106,15 @@ data "aws_iam_policy_document" "consul_bucket" {
       "s3:ListBucket"
     ]
     resources = [
-      aws_s3_bucket.consul_setup.arn
+      aws_s3_bucket.setup.arn
     ]
   }
 }
 
-resource "aws_iam_role_policy" "consul_bucket" {
-  name   = "${random_id.cluster_name.id}-consul-bucket"
+resource "aws_iam_role_policy" "bucket" {
+  name   = "${random_id.cluster_name.id}-setup-bucket"
   role   = aws_iam_role.instance_role.id
-  policy = data.aws_iam_policy_document.consul_bucket.json
+  policy = data.aws_iam_policy_document.setup_bucket.json
 }
 
 data "aws_iam_policy_document" "bucketkms" {
@@ -484,4 +484,52 @@ resource "aws_lb_listener" "vault" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.vault.arn
   }
+}
+
+# Sign CSR which Vault creates and places in s3 Bucket
+resource "tls_private_key" "ca" {
+  algorithm   = "RSA"
+}
+
+resource "tls_self_signed_cert" "ca" {
+  key_algorithm     = "RSA"
+  private_key_pem   = tls_private_key.ca.private_key_pem
+  is_ca_certificate = true
+
+  subject {
+    organization        = "HashiCorp"
+    common_name         = "ca.hashicorp.fun"
+    organizational_unit = "Vault"
+    country             = "United States"
+    locality            = "San Francisco
+  }
+
+  validity_period_hours = var.validity_period
+
+  allowed_uses = [
+    "digital_signature",
+    "cert_signing",
+    "crl_signing",
+  ]
+}
+
+data "aws_s3_bucket_object" "csr" {
+  bucket = aws_s3_bucket.setup.name
+  key    = "vault_csr.pem"
+}
+
+resource "tls_locally_signed_cert" "local" {
+  cert_request_pem   = aws_s3_bucket_object.csr.body
+  ca_key_algorithm   = "RSA"
+  ca_private_key_pem = tls_private_key.ca.private_key_pem
+  ca_cert_pem        = tls_self_signed_cert.ca.cert_pem
+
+  validity_period_hours = var.validity_period
+
+  allowed_uses = [
+    "digital_signature",
+    "key_encipherment",
+    "server_auth",
+    "client_auth",
+  ]
 }
