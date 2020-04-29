@@ -46,3 +46,28 @@ use http://localhost:8200. When switching clusters, close out prior jump
 tunnel and initiate a new tunnel.
 EOF
 }
+
+output "vpc1_id" {
+  value = module.primary_cluster.vpc_id
+}
+
+output "vpc1_region" {
+  value = var.region1
+}
+
+output "vpc2_id" {
+  value = module.dr_cluster.vpc_id
+}
+
+output "vpc2_region" {
+  value = var.region2
+}
+
+output "vpc3_id" {
+  value = module.eu_cluster.vpc_id
+}
+
+output "vpc3_region" {
+  value = var.region3
+}
+
