@@ -101,6 +101,18 @@ resource "aws_key_pair" "key" {
   public_key = tls_private_key.ssh.public_key_openssh
 }
 
+resource "aws_key_pair" "key2" {
+  provider   = aws.region2
+  key_name   = "${random_id.deployment_tag.hex}-key"
+  public_key = tls_private_key.ssh.public_key_openssh
+}
+
+resource "aws_key_pair" "key3" {
+  provider   = aws.region3
+  key_name   = "${random_id.deployment_tag.hex}-key"
+  public_key = tls_private_key.ssh.public_key_openssh
+}
+
 # Lookup most recent AMI
 data "aws_ami" "latest-image" {
   provider    = aws.region1
@@ -149,6 +161,7 @@ module "primary_cluster" {
   subnet_second_octet        = "0"
   force_bucket_destroy       = true
   tags                       = local.tags
+  ssh_key_name               = aws_key_pair.key.key_name
   providers = {
     aws = aws.region1
   }
@@ -168,6 +181,7 @@ module "dr_cluster" {
   providers = {
     aws = aws.region2
   }
+  ssh_key_name               = aws_key_pair.key2.key_name
 }
 
 module "eu_cluster" {
@@ -184,6 +198,7 @@ module "eu_cluster" {
   providers = {
     aws = aws.region3
   }
+  ssh_key_name               = aws_key_pair.key3.key_name
 }
 
 resource "aws_vpc_peering_connection" "bastion_connectivity" {
