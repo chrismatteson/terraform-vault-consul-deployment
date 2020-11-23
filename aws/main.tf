@@ -420,6 +420,26 @@ resource "aws_iam_role_policy" "kms_key" {
   policy = data.aws_iam_policy_document.vault-kms-unseal.json
 }
 
+data "aws_iam_policy_document" "vault-iam-auth" {
+  statement {
+    sid       = "VaultIAMAuth"
+    effect    = "Allow"
+    resources = ["*"]
+
+    actions = [
+      "iam:GetUser",
+      "iam:GetRole",
+      "iam:GetInstanceProfile"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "iam_auth" {
+  name   = "${random_id.cluster_name.id}-iam-auth"
+  role   = aws_iam_role.instance_role.id
+  policy = data.aws_iam_policy_document.vault-iam-auth.json
+}
+
 module "vault" {
   source            = "terraform-aws-modules/autoscaling/aws"
   version           = "3.4.0"
